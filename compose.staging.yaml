@@ -3,11 +3,17 @@ name: boero-staging
 services:
   ui:
     container_name: boero-ui-staging
+    environment:
+      DEPLOYMENT_ENV: staging
+      AUTO_LOGIN_ENABLED: ${AUTO_LOGIN_ENABLED:-false}
 
   api:
     container_name: boero-api-staging
     environment:
       SPRING_PROFILES_ACTIVE: staging
+      AUTO_LOGIN_ENABLED: ${AUTO_LOGIN_ENABLED:-false}
+      AUTO_LOGIN_USER_ID: ${AUTO_LOGIN_USER_ID:-}
+      AUTO_LOGIN_INSTITUTION_ID: ${AUTO_LOGIN_INSTITUTION_ID:-}
 
   redis:
     container_name: boero-redis-staging

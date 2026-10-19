@@ -406,8 +406,26 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
             self.assertIn(f"make deploy-{app} ENV=staging VERSION=sha-${{{{ github.sha }}}}", job(after, "deploy-staging"))
             production_path = ".github/workflows/deploy-production.yaml"
             self.assertEqual(command(["git", "show", "HEAD:" + production_path], repo).stdout, (repo / production_path).read_text())
-        for name in ("compose.staging.yaml", "compose.production.yaml"):
-            self.assertEqual(command(["git", "show", "HEAD:" + name], INFRA).stdout, (INFRA / name).read_text())
+        values = synthetic_env() | {
+            "AUTO_LOGIN_ENABLED": "true",
+            "AUTO_LOGIN_USER_ID": "00000000-0000-0000-0000-000000000001",
+            "AUTO_LOGIN_INSTITUTION_ID": "00000000-0000-0000-0000-000000000002",
+        }
+        for environment, profile in (("staging", "staging"), ("production", "prod")):
+            rendered = self.render(environment, values)
+            self.assertEqual(rendered["name"], f"boero-{environment}")
+            self.assertEqual(rendered["networks"]["default"]["name"], f"boero-network-{environment}")
+            self.assertEqual(rendered["services"]["api"]["environment"]["SPRING_PROFILES_ACTIVE"], profile)
+            for service in ("ui", "api", "postgres", "redis"):
+                configured = rendered["services"][service]
+                self.assertEqual(configured["container_name"], f"boero-{service}-{environment}")
+                for port in configured.get("ports", []):
+                    self.assertEqual(port["host_ip"], "127.0.0.1")
+                for key in ("AUTO_LOGIN_ENABLED", "AUTO_LOGIN_USER_ID", "AUTO_LOGIN_INSTITUTION_ID"):
+                    if environment == "staging" and (service == "api" or service == "ui" and key == "AUTO_LOGIN_ENABLED"):
+                        self.assertEqual(configured["environment"][key], values[key])
+                    else:
+                        self.assertNotIn(key, configured.get("environment", {}))
 
     def test_manual_qa_workflows(self):
         bare = self.work / "origin.git"

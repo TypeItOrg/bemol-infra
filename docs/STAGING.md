@@ -214,3 +214,38 @@ sudo systemctl status boero-backup@staging.service
 sudo systemctl list-timers boero-backup@staging.timer
 sudo journalctl -u boero-backup@staging.service --since today
 ```
+
+## Ingreso institucional automático opcional
+
+La implementación está versionada en API/UI; el servidor sólo configura su activación.
+En `.env.staging`, `AUTO_LOGIN_ENABLED=true` habilita el ingreso desde la raíz
+pública y `AUTO_LOGIN_USER_ID` selecciona el UUID de **users.user_id**, no el
+DNI ni el ID de persona. `AUTO_LOGIN_INSTITUTION_ID` indica la institución a la que
+debe pertenecer esa cuenta. Ambos IDs son obligatorios: si no coinciden con una
+cuenta habilitada con acceso propio, se rechaza el ingreso. No se exige un rol
+particular: se conservan los permisos actuales del usuario configurado. No se crean
+usuarios ni se cambian contraseñas o permisos automáticamente.
+
+La bandera está deshabilitada y ambos IDs están vacíos en el ejemplo. El overlay
+de staging pasa las tres variables a la API y sólo la bandera a la UI, junto con
+`DEPLOYMENT_ENV=staging`.
+Producción y QA no reciben estas opciones del Compose base. Además, la API no
+registra el endpoint con perfiles `prod`, `production`, `qa`, `dev` o `test`, ni
+cuando se combinan con staging, aunque se fuerce la bandera.
+
+La UI sólo inicia este acceso para un GET de `/` en el host HTTPS exacto de
+`FRONTEND_PUBLIC_URL`, sin cookies de sesión institucional ni de plataforma.
+No se activa por prefetch/RSC, APIs, subdominios institucionales ni `/auth/login`;
+el cierre de sesión permite usar el login normal. No hay avisos visibles. Si la
+API está deshabilitada, inaccesible o rechaza la cuenta, se conserva el login normal.
+
+Cada visitante recibe su propia sesión JWT y refresh rotatorio de la cuenta
+compartida, con cookies HttpOnly, Secure, SameSite=Lax y sin Domain. Este ingreso
+sin credenciales no satisface la reautenticación reciente para cambios sensibles.
+La bandera no revoca sesiones ya emitidas: deshabilitarla impide nuevas sesiones
+automáticas; revocar sesiones es una operación separada.
+
+Activarlo concede públicamente los permisos actuales de esa cuenta institucional.
+Usarlo sólo con datos ficticios. Para activar/desactivar, cambiar la
+bandera de `.env.staging` y aplicar el despliegue autorizado de UI/API; no parchear
+código dentro de contenedores ni modificar configuración de producción.
