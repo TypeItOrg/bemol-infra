@@ -229,9 +229,11 @@ usuarios ni se cambian contraseñas o permisos automáticamente.
 La bandera está deshabilitada y ambos IDs están vacíos en el ejemplo. El overlay
 de staging pasa las tres variables a la API y sólo la bandera a la UI, junto con
 `DEPLOYMENT_ENV=staging`.
-Producción y QA no reciben estas opciones del Compose base. Además, la API no
-registra el endpoint con perfiles `prod`, `production`, `qa`, `dev` o `test`, ni
-cuando se combinan con staging, aunque se fuerce la bandera.
+La funcionalidad es genérica para entornos no productivos: la API expone
+`POST /api/v1/auth/login/auto` sólo con la bandera activa y sin perfiles `prod` ni
+`production`, incluso en combinaciones de perfiles. La UI exige `DEPLOYMENT_ENV`
+explícito y distinto de `prod` y `production`. Producción y QA no reciben estas
+opciones del Compose base; los overlays actuales sólo las pasan en staging.
 
 La UI sólo inicia este acceso para un GET de `/` en el host HTTPS exacto de
 `FRONTEND_PUBLIC_URL`, sin cookies de sesión institucional ni de plataforma.
