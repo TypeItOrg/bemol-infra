@@ -1,12 +1,8 @@
 
 <!-- Banner -->
 <p align="center">
-  <img
-    src="https://github.com/user-attachments/assets/4b9303aa-7c33-4866-a2c7-8e73fe7c1c80"
-    alt="Boero - Plataforma de gestión académica"
-    width="2170"
-    height="725"
-  />
+<img width="2172" height="724" alt="ChatGPT Image Oct 19, 2026, 03_40_16 PM" src="https://github.com/user-attachments/assets/2f6f6aaa-b62d-425e-bc22-7abcdded914e" />
+
 </p>
 
 <!-- Tecnologías: Infraestructura & Servicios -->
