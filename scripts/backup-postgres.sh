@@ -14,14 +14,16 @@ cd "$repo_dir"
 env_file=".env.$environment"
 environment_compose_file="compose.$environment.yaml"
 
-if [ ! -f "$env_file" ]; then
+if [ "$environment" != "staging" ] && [ ! -f "$env_file" ]; then
   echo "Missing $env_file" >&2
   exit 1
 fi
 
 read_env_value() {
   key="$1"
-  sed -n "s/^${key}=//p" "$env_file" | tail -n 1
+  if [ -f "$env_file" ]; then
+    sed -n "s/^${key}=//p" "$env_file" | tail -n 1
+  fi
 }
 
 backup_root="${BACKUP_DIR:-$(read_env_value BACKUP_DIR)}"
@@ -39,6 +41,19 @@ case "$retention_days" in
   0) echo "BACKUP_RETENTION_DAYS must be greater than zero" >&2; exit 1 ;;
 esac
 
+if [ "$environment" = "staging" ]; then
+  postgres_containers="$(docker ps \
+    --filter volume=boero-api-postgres-data-staging \
+    --filter label=com.docker.compose.service=postgres \
+    --format '{{.ID}}')"
+  set -- $postgres_containers
+  if [ "$#" -ne 1 ]; then
+    echo "Expected exactly one running staging PostgreSQL container; found $#" >&2
+    exit 1
+  fi
+  postgres_container="$1"
+fi
+
 backup_dir="$backup_root/$environment"
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 final_file="$backup_dir/boero-$environment-$timestamp.dump"
@@ -48,19 +63,23 @@ umask 077
 mkdir -p "$backup_dir"
 trap 'rm -f "$temporary_file"' EXIT HUP INT TERM
 
-run_compose() {
-  docker compose \
-    --env-file "$env_file" \
-    -f compose.yaml \
-    -f "$environment_compose_file" \
-    "$@"
+run_postgres() {
+  if [ "$environment" = "staging" ]; then
+    docker exec -i "$postgres_container" "$@"
+  else
+    docker compose \
+      --env-file "$env_file" \
+      -f compose.yaml \
+      -f "$environment_compose_file" \
+      exec -T postgres "$@"
+  fi
 }
 
-run_compose exec -T postgres sh -c \
+run_postgres sh -c \
   'exec pg_dump --format=custom --dbname="$DB_NAME" --username="$POSTGRES_USER"' \
   > "$temporary_file"
 
-run_compose exec -T postgres pg_restore --list < "$temporary_file" > /dev/null
+run_postgres pg_restore --list < "$temporary_file" > /dev/null
 
 chmod 600 "$temporary_file"
 mv "$temporary_file" "$final_file"

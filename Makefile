@@ -71,4 +71,5 @@ down:
 
 test:
 	./tests/deploy-service.test.sh
+	./tests/backup-postgres.test.sh
 	python3 ./tests/qa-config.test.py

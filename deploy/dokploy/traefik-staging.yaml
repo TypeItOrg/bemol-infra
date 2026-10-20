@@ -1,0 +1,237 @@
+# Install as a separate file under Dokploy's Traefik dynamic directory.
+# Do not paste into the main/static config or replace Dokploy's other files.
+http:
+  routers:
+    boero-staging:
+      entryPoints: [websecure]
+      rule: Host(`staging.typeit.com.ar`)
+      priority: 100
+      service: boero-staging
+      middlewares: [boero-cloudflare-only, boero-common, boero-rate-cloudflare, boero-flight-cloudflare, boero-flight-host]
+      tls: &staging-tls
+        certResolver: cloudflare-staging
+        domains:
+          - main: staging.typeit.com.ar
+            sans: ["*.staging.typeit.com.ar"]
+
+    boero-staging-institutions:
+      entryPoints: [websecure]
+      rule: HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`)
+      priority: 100
+      service: boero-staging
+      middlewares: [boero-direct, boero-common, boero-rate-direct, boero-flight-direct, boero-flight-host]
+      tls: *staging-tls
+
+    boero-staging-write:
+      entryPoints: [websecure]
+      rule: Host(`staging.typeit.com.ar`) && (Method(`POST`) || Method(`PUT`) || Method(`PATCH`))
+      priority: 200
+      service: boero-staging
+      middlewares: [boero-cloudflare-only, boero-common, boero-rate-cloudflare, boero-flight-cloudflare, boero-flight-host, boero-body]
+      tls: *staging-tls
+
+    boero-staging-institutions-write:
+      entryPoints: [websecure]
+      rule: HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`) && (Method(`POST`) || Method(`PUT`) || Method(`PATCH`))
+      priority: 200
+      service: boero-staging
+      middlewares: [boero-direct, boero-common, boero-rate-direct, boero-flight-direct, boero-flight-host, boero-body]
+      tls: *staging-tls
+
+    boero-staging-auth:
+      entryPoints: [websecure]
+      rule: Host(`staging.typeit.com.ar`) && Method(`POST`) && PathRegexp(`^/(auth/(login|register|password-recovery(/reset)?)|admin/auth/login)/?$`)
+      priority: 300
+      service: boero-staging
+      middlewares: [boero-cloudflare-only, boero-common, boero-rate-cloudflare, boero-auth-cloudflare, boero-flight-cloudflare, boero-flight-host, boero-body]
+      tls: *staging-tls
+
+    boero-staging-institutions-auth:
+      entryPoints: [websecure]
+      rule: HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`) && Method(`POST`) && PathRegexp(`^/(auth/(login|register|password-recovery(/reset)?)|admin/auth/login)/?$`)
+      priority: 300
+      service: boero-staging
+      middlewares: [boero-direct, boero-common, boero-rate-direct, boero-auth-direct, boero-flight-direct, boero-flight-host, boero-body]
+      tls: *staging-tls
+
+    boero-staging-private-paths:
+      entryPoints: [websecure]
+      rule: (Host(`staging.typeit.com.ar`) || HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`)) && (PathPrefix(`/actuator`) || Path(`/api/v1`) || PathPrefix(`/api/v1/`))
+      priority: 400
+      service: noop@internal
+      middlewares: [boero-headers, boero-deny]
+      tls: *staging-tls
+
+    boero-staging-www:
+      entryPoints: [websecure]
+      rule: Host(`www.staging.typeit.com.ar`)
+      priority: 500
+      service: noop@internal
+      middlewares: [boero-headers, boero-canonical]
+      tls: *staging-tls
+
+    boero-staging-http:
+      entryPoints: [web]
+      rule: Host(`staging.typeit.com.ar`) || HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`)
+      service: noop@internal
+      middlewares: [boero-canonical, boero-https]
+
+  services:
+    boero-staging:
+      loadBalancer:
+        servers:
+          - url: http://boero-ui-staging:3000
+        passHostHeader: true
+        serversTransport: boero-staging
+        responseForwarding:
+          flushInterval: -1ms
+
+  serversTransports:
+    boero-staging:
+      maxIdleConnsPerHost: 32
+      forwardingTimeouts:
+        dialTimeout: 5s
+        responseHeaderTimeout: 60s
+        idleConnTimeout: 30s
+
+  middlewares:
+    boero-common:
+      chain:
+        middlewares: [boero-headers, boero-compress]
+
+    boero-headers:
+      headers:
+        frameDeny: false
+        customFrameOptionsValue: SAMEORIGIN
+        contentTypeNosniff: true
+        referrerPolicy: strict-origin-when-cross-origin
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentSecurityPolicy: "base-uri 'self'; frame-ancestors 'self'; object-src 'none'"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+
+    boero-compress:
+      compress:
+        encodings: [gzip]
+        minResponseBodyBytes: 1024
+        includedContentTypes:
+          - text/html
+          - text/plain
+          - text/css
+          - text/xml
+          - text/javascript
+          - application/json
+          - application/javascript
+          - application/manifest+json
+          - application/xml
+          - application/xml+rss
+          - image/svg+xml
+
+    # Direct institutional traffic must never supply its own trusted CF headers.
+    boero-direct:
+      headers:
+        customRequestHeaders:
+          CF-Connecting-IP: ""
+          CF-Connecting-IPv6: ""
+          True-Client-IP: ""
+
+    # Only the generic hostname is proxied by CF. Check the TCP peer BEFORE
+    # interpreting CF-Connecting-IP; these ranges do not authenticate our zone.
+    boero-cloudflare-only:
+      ipAllowList:
+        sourceRange:
+          - 103.21.244.0/22
+          - 103.22.200.0/22
+          - 103.31.4.0/22
+          - 104.16.0.0/13
+          - 104.24.0.0/14
+          - 108.162.192.0/18
+          - 131.0.72.0/22
+          - 141.101.64.0/18
+          - 162.158.0.0/15
+          - 172.64.0.0/13
+          - 173.245.48.0/20
+          - 188.114.96.0/20
+          - 190.93.240.0/20
+          - 197.234.240.0/22
+          - 198.41.128.0/17
+          - 2400:cb00::/32
+          - 2606:4700::/32
+          - 2803:f800::/32
+          - 2405:b500::/32
+          - 2405:8100::/32
+          - 2a06:98c0::/29
+          - 2c0f:f248::/32
+
+    boero-rate-direct:
+      rateLimit: &direct-rate
+        average: 20
+        period: 1s
+        burst: 100
+        sourceCriterion:
+          ipStrategy:
+            depth: 0
+
+    boero-rate-cloudflare:
+      rateLimit:
+        <<: *direct-rate
+        sourceCriterion: &cloudflare-source
+          requestHeaderName: CF-Connecting-IP
+
+    boero-auth-direct:
+      rateLimit:
+        <<: *direct-rate
+        average: 30
+        period: 1m
+        burst: 20
+
+    boero-auth-cloudflare:
+      rateLimit:
+        average: 30
+        period: 1m
+        burst: 20
+        sourceCriterion: *cloudflare-source
+
+    # Requests in flight, not Nginx TCP connections. Buckets are per router and
+    # Traefik instance; 200/hostname is NOT the former shared 200/server bound.
+    boero-flight-direct:
+      inFlightReq:
+        amount: 50
+        sourceCriterion:
+          ipStrategy:
+            depth: 0
+
+    boero-flight-cloudflare:
+      inFlightReq:
+        amount: 50
+        sourceCriterion: *cloudflare-source
+
+    boero-flight-host:
+      inFlightReq:
+        amount: 200
+        sourceCriterion:
+          requestHost: true
+
+    # Only write routers use buffering: GET downloads/SSE remain streaming.
+    # Traefik buffers write responses too, even with maxResponseBodyBytes=0.
+    boero-body:
+      buffering:
+        maxRequestBodyBytes: 33554432
+        memRequestBodyBytes: 1048576
+
+    # Public denied paths return 403 instead of the former Nginx 404, never UI/API.
+    boero-deny:
+      ipAllowList:
+        # The unspecified address cannot be a connected TCP peer. Not /0.
+        sourceRange: [0.0.0.0/32]
+
+    boero-canonical:
+      redirectRegex:
+        regex: '^https?://www\.staging\.typeit\.com\.ar(:[0-9]+)?/(.*)'
+        replacement: 'https://staging.typeit.com.ar/${2}'
+        permanent: true
+
+    boero-https:
+      redirectScheme:
+        scheme: https
+        permanent: true

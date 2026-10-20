@@ -1,0 +1,134 @@
+# Standalone Compose entrypoint for Dokploy; do not combine with legacy overlays.
+# Supply both *_VERSION variables: the extended base requires them before merging.
+services:
+  ui:
+    # Dokploy rewrites YAML and drops !reset; define UI without inherited ports.
+    image: ${UI_IMAGE:-ghcr.io/typeitorg/boero-ui}:${UI_VERSION:-staging}
+    pull_policy: always
+    init: true
+    environment:
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?AUTH_COOKIE_SECURE is required}
+      BOERO_API_URL: http://api:8080
+      FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-}
+      INSTITUTIONAL_BASE_DOMAIN: ${INSTITUTIONAL_BASE_DOMAIN:-}
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      DEPLOYMENT_ENV: staging
+      AUTO_LOGIN_ENABLED: ${AUTO_LOGIN_ENABLED:-false}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - ui-next-cache:/app/.next/cache
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    mem_limit: ${UI_MEMORY_LIMIT:-1024m}
+    cpus: ${UI_CPU_LIMIT:-1.0}
+    logging: &logging
+      driver: local
+      options:
+        max-size: ${LOG_MAX_SIZE:-10m}
+        max-file: ${LOG_MAX_FILES:-5}
+    networks:
+      default:
+      dokploy-network:
+        aliases:
+          - boero-ui-staging
+    labels:
+      traefik.enable: "false"
+
+  api:
+    extends:
+      file: compose.yaml
+      service: api
+    image: &api-image ${API_IMAGE:-ghcr.io/typeitorg/boero-api}:${API_VERSION:-staging}
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      AUTO_LOGIN_ENABLED: ${AUTO_LOGIN_ENABLED:-false}
+      AUTO_LOGIN_USER_ID: ${AUTO_LOGIN_USER_ID:-}
+      AUTO_LOGIN_INSTITUTION_ID: ${AUTO_LOGIN_INSTITUTION_ID:-}
+    depends_on:
+      api-storage-init:
+        condition: service_completed_successfully
+    labels:
+      traefik.enable: "false"
+
+  api-storage-init:
+    # No maintenance profile: this must complete before API startup in Dokploy.
+    image: *api-image
+    pull_policy: always
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        owner="$$(id -u appuser):$$(id -g appuser)"
+        chown -hR "$$owner" /app/storage
+        chmod -R u+rwX /app/storage
+    network_mode: none
+    read_only: true
+    volumes:
+      - api-storage:/app/storage
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.25
+    logging: *logging
+
+  redis:
+    extends:
+      file: compose.yaml
+      service: redis
+    labels:
+      traefik.enable: "false"
+
+  postgres:
+    extends:
+      file: compose.yaml
+      service: postgres
+    volumes:
+      # Dokploy File Mount, not a bind into its disposable Git checkout.
+      - type: bind
+        source: ../files/postgres-entrypoint.sh
+        target: /usr/local/bin/postgres-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
+    labels:
+      traefik.enable: "false"
+
+volumes:
+  ui-next-cache:
+    external: true
+    name: boero-ui-next-cache-staging
+  postgres-data:
+    external: true
+    name: boero-api-postgres-data-staging
+  redis-data:
+    external: true
+    name: boero-api-redis-data-staging
+  api-logs:
+    external: true
+    name: boero-api-logs-staging
+  api-storage:
+    external: true
+    name: boero-api-enrollment-storage-staging
+
+networks:
+  default:
+    external: true
+    name: boero-network-staging
+  dokploy-network:
+    external: true

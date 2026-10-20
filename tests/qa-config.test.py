@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """QA config/script/workflow checks: synthetic envs, mocked Docker and a real temp Git graph.
 
-Uses only Python stdlib and the installed docker compose CLI. Never starts containers,
+Uses Python stdlib and the installed docker compose/jq CLIs. Never starts containers,
 reads an existing .env, connects via SSH or pushes. Full-stack proof belongs to acceptance.
 """
 import argparse
@@ -24,13 +24,13 @@ OLD_SHA = "a" * 40
 NEW_SHA = "b" * 40
 OTHER_SHA = "c" * 40
 CASE_TESTS = {
-    "Q01.isolated-compose": ["test_compose_isolation"],
+    "Q01.isolated-compose": ["test_compose_isolation", "test_dokploy_staging_compose"],
     "Q02.qa-profile": ["test_qa_profile", "test_postgres_final_readiness"],
     "Q03.qa-operations": ["test_qa_operations", "test_bootstrap_order"],
     "Q04.invalid-input": ["test_invalid_inputs", "test_preflight_preservation"],
     "Q04.failed-deploy-rollback": ["test_unhealthy_rollback", "test_api_initialization_failure"],
     "C01.publication-gates": ["test_publication_gates"],
-    "C01.existing-flows": ["test_existing_flows"],
+    "C01.existing-flows": ["test_existing_flows", "test_dokploy_staging_workflows"],
     "C02.manual-qa-only": ["test_manual_qa_workflows"],
     "D01.configuration-runbook": ["test_documented_contract"],
 }
@@ -214,6 +214,57 @@ if 'exec' in args and 'postgres' in args:
         self.assertEqual(helper["network_mode"], "none")
         self.assertEqual([v["source"] for v in helper["volumes"]], ["api-storage"])
 
+    def test_dokploy_staging_compose(self):
+        compose_file = INFRA / "compose.dokploy.staging.yaml"
+        self.assertNotRegex(compose_file.read_text(), r"(?m)^[^#\n]*!(?:reset|override)\b")
+        env_file = self.work / "synthetic-dokploy.env"
+        write_env(env_file, synthetic_env() | {"UI_VERSION": "staging", "API_VERSION": "staging"})
+        result = command(["docker", "compose", "--env-file", str(env_file), "-f",
+                          str(compose_file), "config", "--format", "json"],
+                         INFRA, cli_environment())
+        configured = json.loads(result.stdout)
+        expected_volumes = {
+            "ui-next-cache": "boero-ui-next-cache-staging",
+            "postgres-data": "boero-api-postgres-data-staging",
+            "redis-data": "boero-api-redis-data-staging",
+            "api-logs": "boero-api-logs-staging",
+            "api-storage": "boero-api-enrollment-storage-staging",
+        }
+        self.assertEqual(configured["volumes"], {key: {"external": True, "name": name}
+                                                 for key, name in expected_volumes.items()})
+        services = configured["services"]
+        self.assertEqual(set(services), {"ui", "api", "postgres", "redis", "api-storage-init"})
+        self.assertNotIn("ports", services["ui"])
+        api_ports = services["api"]["ports"]
+        self.assertEqual([(port["host_ip"], int(port["published"]), port["target"]) for port in api_ports],
+                         [("127.0.0.1", 8080, 8080)])
+        for name, service in services.items():
+            self.assertNotIn("container_name", service)
+            if name in ("postgres", "redis"):
+                self.assertNotIn("ports", service)
+            self.assertEqual("dokploy-network" in service.get("networks", {}), name == "ui")
+        self.assertEqual(set(services["ui"]["networks"]), {"default", "dokploy-network"})
+        self.assertEqual(configured["networks"]["default"]["name"], "boero-network-staging")
+        self.assertTrue(configured["networks"]["default"]["external"])
+        self.assertTrue(configured["networks"]["dokploy-network"]["external"])
+        self.assertEqual(services["api"]["depends_on"]["api-storage-init"]["condition"],
+                         "service_completed_successfully")
+        helper = services["api-storage-init"]
+        self.assertFalse(helper.get("profiles"))
+        self.assertEqual(helper["network_mode"], "none")
+        self.assertEqual(helper["image"], services["api"]["image"])
+        for name in ("ui", "api", "api-storage-init"):
+            self.assertEqual(services[name]["pull_policy"], "always")
+            self.assertTrue(services[name]["image"].endswith(":staging"))
+        mounts = services["postgres"]["volumes"]
+        wrapper = next(mount for mount in mounts if mount["target"] == "/usr/local/bin/postgres-entrypoint.sh")
+        self.assertEqual(wrapper["source"], str(INFRA.parent / "files/postgres-entrypoint.sh"))
+        self.assertEqual(wrapper["type"], "bind")
+        self.assertTrue(wrapper["read_only"])
+        self.assertFalse(wrapper["bind"]["create_host_path"])
+        data = next(mount for mount in mounts if mount["target"] == "/var/lib/postgresql")
+        self.assertEqual((data["type"], data["source"]), ("volume", "postgres-data"))
+
     def test_qa_profile(self):
         profile = API / "src/main/resources/application-qa.properties"
         values = dict(line.split("=", 1) for line in profile.read_text().splitlines() if line and not line.startswith("#"))
@@ -396,14 +447,12 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
                     self.assertIn("run: pnpm " + gate, job(workflow, "verify"))
 
     def test_existing_flows(self):
-        for repo, app in ((API, "api"), (UI, "ui")):
+        for repo in (API, UI):
             workflow_path = ".github/workflows/ci.yaml"
             before = command(["git", "show", "HEAD:" + workflow_path], repo).stdout
             after = (repo / workflow_path).read_text()
-            self.assertEqual(job(before, "deploy-staging"), job(after, "deploy-staging"))
-            for ref in ("develop", "staging", "main"):
-                self.assertEqual(condition(job(after, "deploy-staging"), "push", ref), ref == "staging")
-            self.assertIn(f"make deploy-{app} ENV=staging VERSION=sha-${{{{ github.sha }}}}", job(after, "deploy-staging"))
+            self.assertEqual(before.replace(job(before, "deploy-staging"), ""),
+                             after.replace(job(after, "deploy-staging"), ""))
             production_path = ".github/workflows/deploy-production.yaml"
             self.assertEqual(command(["git", "show", "HEAD:" + production_path], repo).stdout, (repo / production_path).read_text())
         values = synthetic_env() | {
@@ -426,6 +475,59 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
                         self.assertEqual(configured["environment"][key], values[key])
                     else:
                         self.assertNotIn(key, configured.get("environment", {}))
+
+    def test_dokploy_staging_workflows(self):
+        bindir = self.work / "workflow-bin"
+        bindir.mkdir()
+        request = self.work / "dokploy-request.json"
+        curl = bindir / "curl"
+        curl.write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+pathlib.Path(os.environ['DOKPLOY_TRACE']).write_text(json.dumps(sys.argv[1:]))
+sys.exit(int(os.environ.get('CURL_EXIT', '0')))
+''')
+        curl.chmod(0o755)
+        values = {"DOKPLOY_URL": "https://deploy.example.invalid/", "DOKPLOY_API_KEY": "synthetic-api-key",
+                  "DOKPLOY_STAGING_COMPOSE_ID": 'compose "quoted" \\ $(touch injected)'}
+        environment = cli_environment() | values | {"PATH": str(bindir) + ":" + os.environ["PATH"],
+                                                    "DOKPLOY_TRACE": str(request), "GITHUB_SHA": NEW_SHA,
+                                                    "GITHUB_REPOSITORY": "typeitorg/boero-synthetic"}
+        for repo in (API, UI):
+            workflow = (repo / ".github/workflows/ci.yaml").read_text()
+            deploy = job(workflow, "deploy-staging")
+            self.assertEqual(scalar(deploy, 4, "needs"), "publish-image")
+            self.assertEqual(scalar(deploy, 4, "environment"), "staging")
+            for event in ("push", "pull_request", "workflow_dispatch"):
+                for ref in ("develop", "staging", "main"):
+                    self.assertEqual(condition(deploy, event, ref), event == "push" and ref == "staging")
+            for key in values:
+                self.assertIn(f"{key}: ${{{{ secrets.{key} }}}}", deploy)
+            for forbidden in ("ssh", "git pull", "make deploy", "API_VERSION", "UI_VERSION", "freshVolumes"):
+                self.assertNotIn(forbidden, deploy)
+            body = run_block(workflow, "Request staging deployment")
+            self.assertIn("--proto '=https'", body)
+            result = command(["bash", "-e", "-o", "pipefail", "-c", body], self.work, environment)
+            args = json.loads(request.read_text())
+            self.assertIn("https://deploy.example.invalid/api/compose.deploy", args)
+            for flag in ("--fail", "--silent", "--show-error"):
+                self.assertIn(flag, args)
+            self.assertEqual(args[args.index("--request") + 1], "POST")
+            self.assertIn("x-api-key: " + values["DOKPLOY_API_KEY"], args)
+            self.assertIn("Content-Type: application/json", args)
+            self.assertEqual(json.loads(args[args.index("--data") + 1]),
+                             {"composeId": values["DOKPLOY_STAGING_COMPOSE_ID"],
+                              "title": "typeitorg/boero-synthetic@" + NEW_SHA})
+            self.assertNotIn(values["DOKPLOY_API_KEY"], result.stdout + result.stderr)
+            self.assertFalse((self.work / "injected").exists())
+            for missing in values:
+                request.unlink(missing_ok=True)
+                rejected = command(["bash", "-e", "-o", "pipefail", "-c", body], self.work,
+                                   environment | {missing: ""}, False)
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertFalse(request.exists())
+            failed = command(["bash", "-e", "-o", "pipefail", "-c", body], self.work,
+                             environment | {"CURL_EXIT": "22"}, False)
+            self.assertEqual(failed.returncode, 22)
 
     def test_manual_qa_workflows(self):
         bare = self.work / "origin.git"

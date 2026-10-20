@@ -1,11 +1,20 @@
 # Operación y hardening de staging
 
+> **Transición a Dokploy:** la implementación nueva y el procedimiento de corte
+> están en [Staging con Dokploy](DOKPLOY-STAGING.md). Todavía no se reemplazó Nginx
+> ni el stack del host.
+> El resto de esta página documenta la operación **anterior** con Nginx/SSH y se
+> conserva para recuperar ese stack. Después del corte no usar estos comandos de
+> despliegue/rollback para administrar los contenedores de Dokploy.
+
 Staging está provisionado en un servidor autohosteado. Producción todavía no tiene infraestructura y no tuvo su primer despliegue. La configuración versionada describe el estado deseado; antes de operar hay que comprobar contenedores, variables efectivas, Nginx y salud en el host.
 
-Los workflows actuales del código fuente en UI y API ejecutan `deploy-staging` para
+Los workflows anteriores de UI y API ejecutaban `deploy-staging` para
 `push` a `staging`, después de CI y publicación. La referencia anterior a
 `if: ${{ false }}` ya no describe estos archivos. Esto documenta la política del
-checkout, no confirma qué revisión está activa en GitHub ni la salud del servidor.
+checkout anterior, no confirma qué revisión está activa en GitHub ni la salud del servidor.
+Los cambios locales nuevos reemplazan el paso SSH por la API de Dokploy; no
+publicarlos antes de configurar y aceptar el destino.
 Se conservan Compose, perfiles, ejemplos y comandos de staging/producción; la
 incorporación de QA no cambia sus disparadores.
 

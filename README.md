@@ -5,6 +5,12 @@
 
 </p>
 
+## Operación
+
+- [Staging con Dokploy: preparación y corte](docs/DOKPLOY-STAGING.md)
+- [Staging anterior con Nginx/SSH](docs/STAGING.md)
+- [QA](docs/QA.md) · [Preparación de producción](docs/PRODUCTION.md)
+
 <!-- Tecnologías: Infraestructura & Servicios -->
 <p align="center">
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose" /></a>
