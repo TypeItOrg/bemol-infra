@@ -10,6 +10,12 @@ case "$environment" in
   *) echo "Environment must be qa, staging or production" >&2; exit 1 ;;
 esac
 
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ "$environment" = "staging" ] && [ -e "$repo_dir/.deploy/staging/dokploy-managed" ]; then
+  echo "Staging is managed by Dokploy; legacy command is disabled" >&2
+  exit 1
+fi
+
 case "$service" in
   ui) version_key="UI_VERSION" ;;
   api) version_key="API_VERSION" ;;

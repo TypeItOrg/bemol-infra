@@ -172,6 +172,11 @@ los servicios. Su mensaje final tampoco prueba éxito; comprobar servicios y sal
    una regla UFW alcanza para los puertos que Docker publica.
    Pausar envíos a staging y esperar a que no haya despliegues en curso en ambos
    repositorios. Avisar inicio/impacto y obtener la conformidad para la ventana.
+   Con el checkout actualizado, tomar el lock existente
+   `/tmp/boero-infra-staging.lock` y crear `.deploy/staging/dokploy-managed` dentro
+   de ese lock. Los scripts legacy y `make down` rechazan entonces staging antes
+   de mutar; también falla un job SSH viejo que estuviera esperando el lock.
+   Conservar el marker después del corte. Backup y consultas no quedan bloqueados.
 2. Crear un dump PostgreSQL validado, respaldar configuración privada y Nginx/
    Certbot sin mostrarlos. Verificar una restauración en una base descartable.
    Registrar digests, referencias y nombres de volúmenes actuales.
@@ -198,6 +203,8 @@ los servicios. Su mensaje final tampoco prueba éxito; comprobar servicios y sal
 anteriores y Nginx con sus imágenes/configuración guardadas. Nunca escribir en los
 volúmenes desde dos stacks a la vez. No restaurar backups ni tocar Flyway por
 iniciativa: puede borrar escrituras nuevas; requiere una decisión explícita.
+Sólo después de detener el stack nuevo y decidir volver al flujo legacy, retirar
+el marker bajo el lock. No quitarlo para forzar un despliegue normal.
 
 ## Actions y operación cotidiana
 

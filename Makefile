@@ -67,9 +67,14 @@ logs-api-request:
 	$(COMPOSE) $(COMPOSE_ARGS) exec api grep -- "$$REQUEST_ID" /app/logs/boero-api.log
 
 down:
+ifeq ($(ENV),staging)
+	flock $(LOCK_FILE) sh -ec 'if [ -e "$(dir $(abspath $(lastword $(MAKEFILE_LIST)))).deploy/staging/dokploy-managed" ]; then echo "Staging is managed by Dokploy; legacy command is disabled" >&2; exit 1; fi; exec $(COMPOSE) $(COMPOSE_ARGS) down --remove-orphans'
+else
 	$(COMPOSE) $(COMPOSE_ARGS) down --remove-orphans
+endif
 
 test:
 	./tests/deploy-service.test.sh
 	./tests/backup-postgres.test.sh
+	./tests/legacy-dokploy-guard.test.sh
 	python3 ./tests/qa-config.test.py

@@ -8,6 +8,11 @@ case "$environment" in
 esac
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ "$environment" = "staging" ] && [ -e "$repo_dir/.deploy/staging/dokploy-managed" ]; then
+  echo "Staging is managed by Dokploy; legacy command is disabled" >&2
+  exit 1
+fi
+
 cd "$repo_dir"
 env_file=".env.$environment"
 if [ ! -f "$env_file" ]; then
