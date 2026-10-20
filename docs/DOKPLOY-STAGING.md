@@ -270,7 +270,7 @@ Ambas aplicaciones tienen los mismos dos archivos en `develop` y `staging`:
 
 Un push a `develop` valida el código, pero no publica imágenes ni despliega: su ejecución sigue siendo local. `main` también queda sólo con CI. Los archivos pueden ser iguales en ambas ramas porque los triggers y `github.ref_name` determinan qué se ejecuta. No hay workflows de QA ni producción; se conserva la configuración preliminar de producción para revisarla en el futuro.
 
-Los runners se fijan en `ubuntu-24.04` y las cargas de artifacts usan Node 24. API reutiliza compilación mediante la caché básica gratuita de Gradle/GitHub, sin cachear resultados de tests ni publicar Build Scans. Su CI conserva perfiles de tiempos y reportes JUnit durante 7 días. Esto no traslada pruebas ni compilación al servidor de staging.
+Los runners se fijan en `ubuntu-24.04` y las cargas de artifacts usan Node 24. API reutiliza compilación mediante la caché nativa de GitHub, con clave por job/commit y restauración de la entrada previa, sin cachear resultados de tests ni publicar Build Scans. Su CI conserva perfiles de tiempos y reportes JUnit durante 7 días. Esto no traslada pruebas ni compilación al servidor de staging.
 
 Conservar estos archivos al promover develop a staging, sin sobrescribir ni forzar ramas. Los grupos de concurrencia del caller y del CI reutilizable son diferentes.
 
