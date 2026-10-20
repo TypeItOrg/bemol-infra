@@ -1,15 +1,31 @@
 # Staging con Dokploy
 
-**Estado: preparación; todavía no se hizo el corte.** El servidor sigue con
-Nginx y el stack anterior hasta completar los requisitos y avisar al responsable.
-Esta guía sólo aplica a staging. No instala ni modifica producción o QA.
+**Estado: operativo; verificación de puesta en marcha del 2026-10-20.**
+El 2026-10-20 se instalaron Dokploy v0.30.8 y Traefik v3.6.25 en staging, con
+autorización de la ventana. El primer arranque conservó las imágenes SHA,
+valores efectivos y cinco volúmenes anteriores. Los cuatro servicios están
+saludables también después de sus nuevos despliegues desde Actions. Se verificaron
+HTTPS general/institucional, certificado wildcard y panel. Nginx y contenedores
+legacy quedan detenidos para vuelta; Docker Cleanup está desactivado.
+Esta guía sólo aplica a staging; producción y QA no se modificaron.
 
-Preparación verificada el 2026-10-20: sudo operativo, respaldo privado de
-configuración y dump PostgreSQL restaurado en un contenedor aislado sin red ni
-volúmenes persistentes. Se crearon y verificaron por API los registros wildcard
-institucional DNS-only y panel con proxy Cloudflare, sin cambiar los existentes.
-Eso **no confirma** que Dokploy o el panel estén instalados ni certificados.
-Antes de cada corte repetir el inventario y los respaldos necesarios.
+Los pipelines de [API](https://github.com/TypeItOrg/boero-api/actions/runs/39491621238)
+y [UI](https://github.com/TypeItOrg/boero-ui/actions/runs/39493133060) terminaron
+correctamente y se comprobaron también sus despliegues nativos, salud HTTPS y
+manifests de plataforma contra los SHA publicados. El usuario confirmó ingreso y
+datos. El puerto 3000 está cerrado; el panel sólo se publica por HTTPS. El backup
+diario PostgreSQL está activo y su servicio produjo un dump validado.
+
+**Pendientes humanos de cierre:** activar 2FA del administrador, aceptar o resolver
+la diferencia de IP mostrada en Sesiones y confirmar el retiro de los secrets SSH
+legacy de ambos environments staging. No se probaron passkeys ni carga/descarga
+funcional de adjuntos durante esta verificación; no afirmar equivalencia completa.
+
+Se validó una restauración PostgreSQL aislada y se conservaron fuera del host el
+dump final, configuración y copias offline de los cinco volúmenes. El wildcard
+institucional es DNS-only y el panel usa el proxy Cloudflare, sin extras pagos.
+Las copias de volúmenes/configuración fuera del host son snapshots de esta ventana,
+no un nuevo respaldo automático de adjuntos o de los metadatos de Dokploy.
 
 ## El flujo, sin scripts de despliegue propios
 
@@ -40,6 +56,9 @@ y los tags SHA al aceptar cada versión; para reproducir o volver atrás, fijar 
 
 El job se llama **Request staging deployment**: un HTTP exitoso sólo confirma la
 solicitud asíncrona, no la salud. Revisar el despliegue en Dokploy y los healthchecks.
+Con proveedor Git, v0.30.8 reemplaza el título de la solicitud al terminar por el
+commit de infraestructura. Ese título no acredita el SHA de UI/API: relacionar
+los runs de Actions con los digests del registro y de los contenedores reales.
 No se conserva el rollback automático del shell anterior. Volver a imágenes previas
 no deshace migraciones de Flyway.
 
@@ -120,8 +139,9 @@ el archivo dinámico de Traefik.
    conservar providers, direcciones, redirecciones y rutas/resolvers del panel.
    Completar el contacto ACME. No reemplazar el documento entero por el fragmento.
 6. Configurar el token mediante Environment de **Traefik**, usando la ruta `_FILE`
-   del ejemplo; directorio privado 0700 y archivos 0600. Guardar Environment o la
-   configuración estática recrea Traefik: hacerlo dentro de la ventana acordada.
+   del ejemplo; directorio privado 0700 y archivos 0600. Aplicar cambios estáticos
+   requiere reiniciar/recrear Traefik dentro de la ventana acordada; guardar el
+   archivo por API no lo recarga. Guardar su Environment sí solicita recrearlo.
 7. Configurar el panel con HTTPS en `deploy-staging.typeit.com.ar`. Hacer su alta
    inicial mediante túnel SSH, sin dejar el puerto 3000 públicamente accesible.
    Después de verificar HTTPS, retirar la publicación directa de 3000 siguiendo
@@ -144,13 +164,14 @@ no corre como parte de un paso SSH ni requiere credenciales de aplicación.
   puede demorar respuestas de Server Actions; GET de descargas/SSE no lo usa.
   Validar formularios, carga y descarga de adjuntos, y navegación antes de aceptar.
 - Detrás de CF, Traefik puede entregar `X-Real-IP` del edge: la UI actual lo prefiere
-  para metadatos de autenticación. No afirmar paridad de IP de auditoría con Nginx;
+  para metadatos de autenticación. Afecta la IP mostrada en Sesiones, no la decisión
+  de autenticación ni los límites del proxy. No afirmar paridad de esa IP con Nginx;
   resolver o aceptar expresamente esta diferencia antes del corte definitivo.
 
 ## Corte: avisar primero, no ejecutar como parte de una prueba
 
-La instalación estándar requiere libres **80, 443 y 3000**. Actualmente Nginx y UI
-los ocupan; instalar Dokploy no es un paso inocuo previo a la ventana.
+La instalación estándar requiere libres **80, 443 y 3000**. En el stack legacy
+los ocupaban Nginx y UI; instalar Dokploy no es un paso inocuo previo a la ventana.
 
 Release elegida y revisada: **Dokploy v0.30.8**, con Traefik v3.6.25. Su
 [instalador de release](https://github.com/Dokploy/dokploy/releases/download/v0.30.8/install.sh)
@@ -213,12 +234,20 @@ Secrets del environment `staging` en **ambos** repositorios:
 | Secret | Valor |
 |---|---|
 | `DOKPLOY_URL` | `https://deploy-staging.typeit.com.ar` |
-| `DOKPLOY_API_KEY` | Credencial Dokploy dedicada, con el menor alcance disponible |
+| `DOKPLOY_API_KEY` | Credencial Dokploy dedicada y privada para Actions |
 | `DOKPLOY_STAGING_COMPOSE_ID` | ID del mismo servicio Compose de Boero staging |
 
 No cambiar secrets de producción/QA. No bloquear este endpoint detrás de una
 pantalla de login de Cloudflare Access que Actions no pueda atravesar. La API key
 es privilegiada: no imprimir respuestas ni habilitar trazas shell que la muestren.
+En v0.30.8 hereda el rol de su usuario: una clave del owner es administrativa,
+no se limita a `compose.deploy` ni a un Compose concreto. Usar una clave dedicada
+permite revocarla por separado, no reduce sus permisos.
+
+Los cambios de workflows se publicaron en la rama `staging`. Conservarlos al
+integrar la próxima promoción desde `develop`, mediante el flujo Git acordado;
+no sobrescribir ni forzar ramas para sincronizarlas. Esta migración no propagó
+los commits a `develop` ni incorporó sus cambios funcionales pendientes.
 
 Operar despliegues, logs, estado y cambios de variables desde Dokploy. Para rollback,
 fijar los dos tags SHA conocidos en Environment y redeploy; revisar compatibilidad

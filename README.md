@@ -7,7 +7,7 @@
 
 ## Operación
 
-- [Staging con Dokploy: preparación y corte](docs/DOKPLOY-STAGING.md)
+- [Staging con Dokploy y Traefik](docs/DOKPLOY-STAGING.md)
 - [Staging anterior con Nginx/SSH](docs/STAGING.md)
 - [QA](docs/QA.md) · [Preparación de producción](docs/PRODUCTION.md)
 
