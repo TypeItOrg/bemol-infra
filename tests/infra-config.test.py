@@ -432,30 +432,56 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
         self.assertEqual(sum("up" in args for args in commands), 1)
 
     def test_publication_gates(self):
-        for repo, expected in ((API, "[static-analysis, test]"), (UI, "verify")):
-            workflow = (repo / ".github/workflows/ci-staging.yaml").read_text()
-            publish = job(workflow, "publish-image")
-            self.assertEqual(scalar(publish, 4, "needs"), expected)
-            for event in ("push", "pull_request", "workflow_dispatch"):
+        for repo in (API, UI):
+            ci = (repo / ".github/workflows/ci.yaml").read_text()
+            deploy = (repo / ".github/workflows/deploy-staging.yaml").read_text()
+            self.assertIn("  workflow_call:\n", ci)
+            self.assertIn("  push:\n    branches:\n      - develop\n      - main\n", ci)
+            self.assertIn("  pull_request:\n    branches:\n      - develop\n      - staging\n      - main\n", ci)
+            self.assertIn("on:\n  push:\n    branches:\n      - staging\n", deploy)
+            self.assertNotIn("workflow_dispatch", deploy)
+            self.assertNotIn("workflow_run", deploy)
+            self.assertEqual(scalar(job(deploy, "ci"), 4, "uses"), "./.github/workflows/ci.yaml")
+            self.assertNotIn("secrets: inherit", deploy)
+            for forbidden in ("publish-image:", "deploy-staging:", "packages: write", "DOKPLOY_"):
+                self.assertNotIn(forbidden, ci)
+            publish = job(deploy, "publish-image")
+            self.assertEqual(scalar(publish, 4, "needs"), "ci")
+            for event in ("push", "pull_request", "workflow_dispatch", "workflow_run"):
                 for ref in ("develop", "staging", "main", "feature/example"):
                     self.assertEqual(condition(publish, event, ref), event == "push" and ref == "staging")
+            self.assertIn("ref: ${{ github.sha }}", publish)
             self.assertIn("sha-${{ github.sha }}", publish)
             self.assertIn("push: true", publish)
+            for workflow in (ci, deploy):
+                self.assertNotIn("ubuntu-latest", workflow)
+                self.assertNotIn("actions/upload-artifact@v4", workflow)
+                for runner in re.findall(r"runs-on: (.+)", workflow):
+                    self.assertEqual(runner, "ubuntu-24.04")
             if repo == API:
-                self.assertIn("staticAnalysis", job(workflow, "static-analysis"))
-                self.assertIn("spotlessCheck fastTest", job(workflow, "test"))
-                self.assertIn("integrationTest", job(workflow, "test"))
-                self.assertIn("spotlessCheck test", job(workflow, "test"))
+                self.assertIn("staticAnalysis", job(ci, "static-analysis"))
+                self.assertIn("spotlessCheck fastTest", job(ci, "test"))
+                self.assertIn("integrationTest", job(ci, "test"))
+                self.assertIn("spotlessCheck test", job(ci, "test"))
+                self.assertIn("gradle/actions/setup-gradle@v6", ci)
+                self.assertEqual(ci.count("cache-provider: basic"), 2)
+                self.assertNotIn("cache: gradle", ci)
+                self.assertIn("--build-cache", ci)
+                self.assertIn("--profile", ci)
+                self.assertIn("build/test-results/", ci)
+                self.assertIn("outputs.cacheIf { false }", (repo / "build.gradle").read_text())
             else:
                 for gate in ("format:check", "lint", "typecheck", "test --runInBand", "build"):
-                    self.assertIn("run: pnpm " + gate, job(workflow, "verify"))
+                    self.assertIn("run: pnpm " + gate, job(ci, "verify"))
 
     def test_existing_flows(self):
         for repo in (API, UI):
             workflows = repo / ".github/workflows"
-            workflow = (workflows / "ci-staging.yaml").read_text()
-            self.assertEqual(scalar(workflow, 0, "name"), "CI and staging deployment")
-            for removed in ("ci.yaml", "deploy-qa.yaml", "deploy-production.yaml"):
+            workflow = (workflows / "ci.yaml").read_text()
+            deploy = (workflows / "deploy-staging.yaml").read_text()
+            self.assertEqual(scalar(workflow, 0, "name"), "CI")
+            self.assertEqual(scalar(deploy, 0, "name"), "Deploy staging")
+            for removed in ("ci-staging.yaml", "deploy-qa.yaml", "deploy-production.yaml"):
                 self.assertFalse((workflows / removed).exists(), removed)
         values = synthetic_env() | {
             "AUTO_LOGIN_ENABLED": "true",
@@ -495,7 +521,7 @@ sys.exit(int(os.environ.get('CURL_EXIT', '0')))
                                                     "DOKPLOY_TRACE": str(request), "GITHUB_SHA": NEW_SHA,
                                                     "GITHUB_REPOSITORY": "typeitorg/boero-synthetic"}
         for repo in (API, UI):
-            workflow = (repo / ".github/workflows/ci-staging.yaml").read_text()
+            workflow = (repo / ".github/workflows/deploy-staging.yaml").read_text()
             deploy = job(workflow, "deploy-staging")
             self.assertEqual(scalar(deploy, 4, "needs"), "publish-image")
             self.assertEqual(scalar(deploy, 4, "environment"), "staging")

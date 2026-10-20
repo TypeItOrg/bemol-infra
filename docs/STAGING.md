@@ -117,7 +117,7 @@ La clave pública correspondiente debe existir en `authorized_keys` del usuario 
 ## Despliegue automático
 
 En los workflows legacy de API/UI, un push a `staging` seguía este flujo.
-Los actuales `.github/workflows/ci-staging.yaml` usan Dokploy y no estos pasos:
+Los actuales `.github/workflows/deploy-staging.yaml` llaman al CI reutilizable y usan Dokploy, no estos pasos:
 
 1. Ejecuta las validaciones de CI.
 2. Publica `ghcr.io/typeitorg/<app>:sha-<commit>`.

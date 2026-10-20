@@ -301,8 +301,10 @@
       "infra/tests/infra-config.test.py"
     ],
     "C01": [
-      "api/.github/workflows/ci-staging.yaml",
-      "ui/.github/workflows/ci-staging.yaml"
+      "api/.github/workflows/ci.yaml",
+      "api/.github/workflows/deploy-staging.yaml",
+      "ui/.github/workflows/ci.yaml",
+      "ui/.github/workflows/deploy-staging.yaml"
     ],
     "I01": [
       "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/institutional/entities/Institution.java",

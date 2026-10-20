@@ -263,18 +263,16 @@ En v0.30.8 hereda el rol de su usuario: una clave del owner es administrativa,
 no se limita a `compose.deploy` ni a un Compose concreto. Usar una clave dedicada
 permite revocarla por separado, no reduce sus permisos.
 
-Al retirar QA, los workflows de `develop` y `staging` se alinean con el despliegue
-Dokploy. Un push a `develop` valida el código, pero no publica imágenes ni
-despliega un ambiente remoto: su ejecución sigue siendo local. Sólo un push a
-`staging` publica imágenes y solicita este deploy; `main` también queda sólo con
-CI. Se retira `Deploy QA` en ambas ramas. El workflow se llama
-**CI and staging deployment** y vive en `.github/workflows/ci-staging.yaml` en
-ambas aplicaciones. El archivo es igual en `develop` y `staging`; sus condiciones
-usando `github.ref_name` determinan qué jobs pueden ejecutarse. No hay workflow
-de despliegue a producción mientras ese
-ambiente no exista; su configuración futura de infraestructura se conserva.
-Conservar esta configuración en las siguientes promociones; no sobrescribir ni
-forzar ramas para sincronizarlas.
+Ambas aplicaciones tienen los mismos dos archivos en `develop` y `staging`:
+
+- `.github/workflows/ci.yaml` (**CI**) valida PR y pushes a develop/main. No publica imágenes ni recibe secrets de Dokploy.
+- `.github/workflows/deploy-staging.yaml` (**Deploy staging**) sólo se activa por push a staging. Llama al mismo CI del mismo commit mediante `workflow_call`; si pasa, publica la imagen y solicita el despliegue. No dispara otro CI duplicado ni usa `workflow_run`, por lo que conserva la referencia de staging para sus restricciones de Environment.
+
+Un push a `develop` valida el código, pero no publica imágenes ni despliega: su ejecución sigue siendo local. `main` también queda sólo con CI. Los archivos pueden ser iguales en ambas ramas porque los triggers y `github.ref_name` determinan qué se ejecuta. No hay workflows de QA ni producción; se conserva la configuración preliminar de producción para revisarla en el futuro.
+
+Los runners se fijan en `ubuntu-24.04` y las cargas de artifacts usan Node 24. API reutiliza compilación mediante la caché básica gratuita de Gradle/GitHub, sin cachear resultados de tests ni publicar Build Scans. Su CI conserva perfiles de tiempos y reportes JUnit durante 7 días. Esto no traslada pruebas ni compilación al servidor de staging.
+
+Conservar estos archivos al promover develop a staging, sin sobrescribir ni forzar ramas. Los grupos de concurrencia del caller y del CI reutilizable son diferentes.
 
 ### Retiro de QA del 2026-10-20
 
