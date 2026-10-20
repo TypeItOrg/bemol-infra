@@ -111,6 +111,19 @@ El SHA de Git identifica el código; `sha-<commit>` es el nombre de un tag de
 imagen. Su digest `sha256:...` identifica el contenido de la imagen descargada.
 Son referencias distintas, y el commit de `boero-infra` tampoco es el de API/UI.
 
+Un índice OCI puede cambiar sólo por la información de procedencia, manteniendo
+idéntico el manifiesto ejecutable de `linux/amd64`. En la validación del flujo
+separado, Dokploy descargó el índice nuevo de API y Compose conservó el contenedor
+saludable porque ese manifiesto era idéntico; no se forzó una recreación.
+
+En Docker 29 con containerd, verificar dos cosas: el digest de índice publicado
+por Actions contra `docker image inspect <imagen>:staging` y el manifiesto de
+plataforma de esa imagen (`docker image inspect --platform linux/amd64`) contra
+`ImageManifestDescriptor.digest` del contenedor. Su `.Image` puede conservar el
+índice anterior cuando el binario no cambió. No rechazar un despliegue ni forzar
+un reinicio por esa diferencia si el índice nuevo fue descargado y el manifiesto
+ejecutable coincide. Si no coincide, la nueva imagen todavía no está ejecutándose.
+
 El job se llama **Request staging deployment**: un HTTP exitoso sólo confirma la
 solicitud asíncrona, no la salud. Revisar el despliegue en Dokploy y los healthchecks.
 Con proveedor Git, v0.30.8 reemplaza el título de la solicitud al terminar por el
