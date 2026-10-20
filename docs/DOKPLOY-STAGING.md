@@ -1,13 +1,16 @@
 # Staging con Dokploy
 
-**Estado: operativo; verificación de puesta en marcha del 2026-10-20.**
-El 2026-10-20 se instalaron Dokploy v0.30.8 y Traefik v3.6.25 en staging, con
-autorización de la ventana. El primer arranque conservó las imágenes SHA,
-valores efectivos y cinco volúmenes anteriores. Los cuatro servicios están
-saludables también después de sus nuevos despliegues desde Actions. Se verificaron
-HTTPS general/institucional, certificado wildcard y panel. Nginx y contenedores
-legacy quedan detenidos para vuelta; Docker Cleanup está desactivado.
-Esta guía sólo aplica a staging; producción y QA no se modificaron.
+**Estado: infraestructura migrada y operativa; validación funcional parcial.**
+Esta guía explica cómo funciona y cómo se opera staging desde la migración del
+2026-10-20 en el host `cristinet`. No modifica la operación de producción ni QA.
+
+Se instalaron Dokploy v0.30.8 y Traefik v3.6.25 durante una ventana autorizada.
+El primer arranque conservó las imágenes SHA, valores efectivos y cinco volúmenes
+anteriores. Los cuatro servicios permanentes (UI, API, PostgreSQL y Redis) están
+saludables; el auxiliar `api-storage-init` es transitorio, no un quinto servidor.
+Las comprobaciones más recientes dieron HTTP 200 en health general/institucional
+y panel. Nginx y los contenedores legacy quedan detenidos para vuelta; Docker
+Cleanup está desactivado y el sudo temporal ya fue revocado.
 
 Los pipelines de [API](https://github.com/TypeItOrg/boero-api/actions/runs/39491621238)
 y [UI](https://github.com/TypeItOrg/boero-ui/actions/runs/39493133060) terminaron
@@ -16,12 +19,41 @@ manifests de plataforma contra los SHA publicados. El usuario confirmó ingreso 
 datos. El puerto 3000 está cerrado; el panel sólo se publica por HTTPS. El backup
 diario PostgreSQL está activo y su servicio produjo un dump validado.
 
-**Pendiente humano de cierre:** configurar la autenticación reforzada de la cuenta
-owner de Dokploy. En esta intervención no se registró ninguna passkey ni se activó
-TOTP. La limpieza de secrets SSH legacy de ambos environments staging está
-completada. El usuario aceptó la diferencia de IP mostrada en Sesiones exclusivamente
-para staging. No se probaron passkeys de Boero ni carga/descarga funcional de adjuntos
-durante esta verificación; no afirmar equivalencia completa.
+El usuario confirmó una **passkey registrada en el panel** y decidió mantenerla así;
+registrarla no deshabilita el acceso con contraseña ni convierte el panel en
+passkey-only. No se comprobó TOTP activo ni se exige activarlo para cerrar esta
+migración por decisión del usuario. La
+limpieza de secrets SSH legacy de ambos environments staging está completada.
+La diferencia de IP mostrada en Sesiones fue aceptada exclusivamente para staging.
+
+### Resultado de la validación funcional del 2026-10-20
+
+| Recorrido | Resultado y alcance |
+|---|---|
+| Listados de personas e inscripciones | Lectura verificada; no se modificaron registros existentes |
+| PDF demo existente | Preview y descarga correctos; archivo PDF de 1747 bytes |
+| Alta de representado nuevo (`NEW`) | Bloqueada por HTTP 400: cuerpo inválido por omisión de `ownAccessRequested` en el contrato UI/API desplegado; el caso de uso no se ejecutó |
+| Carga de un adjunto nuevo | No se inició: el alta anterior fue rechazada antes del upload; no puede darse por probada |
+| `/my-dependents` | Mostró un error temporal y un `TimeoutError` en UI; al reintentar cargó la lista, sin la persona de prueba. Causa no identificada |
+| Passkey de Boero | Validación manual diferida por el usuario: «Luego lo pruebo yo a eso»; no probada ni declarada no aplicable |
+
+El PDF descargado tuvo SHA-256
+`fa54bd21742f38b9d32f91dcd381c64f6cb9be757f1ac8163ceeec6ec926cf47`.
+Eso verifica lectura de un archivo preservado, no escritura de adjuntos nuevos.
+No se crearon fixtures ni se alteraron datos existentes; la persona de prueba
+continuó ausente tras el rechazo. Producción no fue tocada.
+
+La incompatibilidad del alta ya existía en el código de aplicación. El usuario
+indicó que la corrigió en `develop`; no se promovió ni se comprobó esa corrección
+en staging como parte de esta migración. La revisión funcional no autoriza editar
+o publicar cambios adicionales de aplicación.
+
+Durante el timeout de UI, API respondió `GET representations/page` con HTTP 200
+en 162 ms; los cuatro servicios seguían saludables y los recursos eran normales.
+La lista se recuperó al reintentar; no se identificó la causa del timeout y no se
+atribuye a Traefik. Los resultados
+anteriores dejan la **aceptación funcional completa pendiente por aplicación**,
+sin invalidar la migración operativa ni afirmar que todos los recorridos pasaron.
 
 Se validó una restauración PostgreSQL aislada y se conservaron fuera del host el
 dump final, configuración y copias offline de los cinco volúmenes. El wildcard
@@ -29,7 +61,10 @@ institucional es DNS-only y el panel usa el proxy Cloudflare, sin extras pagos.
 Las copias de volúmenes/configuración fuera del host son snapshots de esta ventana,
 no un nuevo respaldo automático de adjuntos o de los metadatos de Dokploy.
 
-## El flujo, sin scripts de despliegue propios
+## 1. Qué hace cada pieza
+
+**Idea central:** GitHub fabrica las imágenes; Dokploy las ejecuta; Traefik recibe
+las visitas. Ninguna de esas piezas reemplaza la lógica de negocio de Boero.
 
 ```text
 push a staging → GitHub Actions valida y publica GHCR
@@ -40,14 +75,30 @@ Internet → Cloudflare (sólo hostname general) → Traefik → UI → API → 
 Internet → Traefik (subdominios institucionales DNS-only) ──┘
 ```
 
-- **Actions:** validaciones, build y publicación. Se conservan los tags
-  `sha-<commit>` y `staging`. Sólo un push a la rama `staging` solicita este deploy.
-- **Dokploy:** variables privadas del ambiente, descarga, arranque, logs e historial.
-  No compila UI/API en el servidor. No activar otro auto-deploy por Git/webhook.
-- **Traefik:** proxy, HTTPS, wildcard y políticas HTTP. Nginx/Certbot dejan de
-  intervenir en staging después de aceptar el corte.
-- **boero-infra:** Compose y configuración declarativa revisable; no contiene secretos.
-- **Aplicación:** relaciona un subdominio con una institución. No llama a Cloudflare.
+| Pieza | Responsabilidad | Lo que no hace |
+|---|---|---|
+| Repositorios API/UI | Código, Dockerfile y desarrollo local de cada aplicación | No guardan los valores privados de staging |
+| GitHub Actions | Validar, construir y publicar las imágenes; pedir el deploy por HTTPS | No entra por SSH ni copia archivos `.env` al servidor |
+| GHCR (registro de imágenes de GitHub) | Guardar las imágenes Docker publicadas | No inicia contenedores ni almacena la base de datos |
+| Dokploy | Panel para variables privadas, despliegues, estado y logs | No compila UI/API en staging ni decide los permisos de Boero |
+| Docker Compose | Describir servicios, variables que recibe cada uno, redes y volúmenes | No descubre automáticamente qué variables necesita el código |
+| Traefik | Proxy, HTTPS y reglas HTTP; reemplaza Nginx/Certbot en este staging | No crea instituciones ni autentica usuarios de Boero |
+| Cloudflare | DNS y proxy de los hostnames configurados como proxied | No oculta la IP de los hostnames DNS-only |
+| UI / API | UI sirve la interfaz y actúa como intermediaria hacia API; API aplica el negocio y la autorización | API no se publica directamente en Internet |
+| PostgreSQL / Redis | PostgreSQL conserva datos de negocio; Redis soporta estado temporal y mecanismos de autenticación/revocación | Redis no sustituye la base ni es una caché para vaciar sin evaluar el impacto |
+| `boero-infra` | Configuración declarativa revisable y mantenimiento de datos | No debe contener secretos reales |
+
+Compose sigue siendo **un único stack** de Boero; no se convirtió PostgreSQL en
+una base gestionada por el panel ni se migró el stack de aplicación a Docker Stack.
+Dokploy usa Swarm para sus propios componentes, pero eso no cambia ese modo de Boero.
+Sólo UI se conecta a la red del proxy; API habla con PostgreSQL/Redis en la red
+privada. El navegador utiliza la UI y sus rutas `/api/*`, no `http://api:8080`.
+
+### Qué versión queda ejecutándose
+
+Sólo un push a la rama `staging` de API o UI solicita este deploy, después de sus
+validaciones y publicación. No activar otro auto-deploy por Git/webhook en Dokploy.
+Se conservan los tags `sha-<commit>` y `staging` en GHCR.
 
 En el uso normal `UI_VERSION=staging` y `API_VERSION=staging`: se descargan las
 últimas imágenes publicadas de esa rama. No significa que el HEAD de Git ya esté
@@ -55,6 +106,10 @@ desplegado: una revisión con CI fallido no se publica, y UI/API tienen pipeline
 independientes. Un redeploy puede actualizar ambas imágenes. Registrar sus digests
 y los tags SHA al aceptar cada versión; para reproducir o volver atrás, fijar ambos
 `sha-<commit>` en Dokploy. No reconstruir ni mover tags SHA.
+
+El SHA de Git identifica el código; `sha-<commit>` es el nombre de un tag de
+imagen. Su digest `sha256:...` identifica el contenido de la imagen descargada.
+Son referencias distintas, y el commit de `boero-infra` tampoco es el de API/UI.
 
 El job se llama **Request staging deployment**: un HTTP exitoso sólo confirma la
 solicitud asíncrona, no la salud. Revisar el despliegue en Dokploy y los healthchecks.
@@ -64,28 +119,60 @@ los runs de Actions con los digests del registro y de los contenedores reales.
 No se conserva el rollback automático del shell anterior. Volver a imágenes previas
 no deshace migraciones de Flyway.
 
-## Accesos necesarios
+## 2. Dónde viven las variables
 
-1. SSH `home-server-staging`, usuario `staging`, con sudo temporal para instalar,
-   respaldar configuración protegida y cambiar los servicios durante la ventana.
-   Revocar el sudo temporal al terminar. No usar el socket Docker para eludir sudo.
-2. Cloudflare: editar únicamente registros de staging en `typeit.com.ar` y disponer
-   de un token DNS limitado a esa zona, con `Zone:Read` y `DNS:Edit`. Revisar si el
-   token privado actual de Certbot sirve; no imprimirlo ni ponerlo en el chat/Git.
-3. GitHub: lectura de `boero-infra` desde Dokploy y descarga de imágenes GHCR (si
-   son privadas), más administración del environment `staging` en UI/API.
-4. Cuenta administradora de Dokploy. Completar personalmente el alta/contraseña y
-   2FA; proteger el panel, no compartir credenciales por chat.
+No hay un `.env` único que se suba desde la PC a todos los servicios. Hay
+configuración local del desarrollador, valores privados del ambiente y parámetros
+para fabricar una imagen. Son responsabilidades distintas.
 
-Después del alta y de crear una API key desde el panel, **deshabilitar Docker
-Cleanup como primer cambio autenticado** (`settings.updateDockerCleanup`,
-`enableDockerCleanup=false`) y comprobar el valor antes de reiniciar Dokploy.
-En v0.30.8 está activado por defecto: su limpieza diaria es global y puede borrar
-contenedores legacy detenidos, imágenes y redes que necesitamos para volver atrás.
-No modifica volúmenes, pero eso no alcanza para preservar el rollback. No ejecutar
-prune por iniciativa durante la migración.
+| Lugar | Para qué sirve | ¿Se copia al staging operativo? |
+|---|---|---|
+| API/UI: `compose.yaml` y `.env.dev` opcional | Desarrollo Docker local; los Compose traen defaults y `.env.dev` los personaliza | No |
+| UI nativa: archivos `.env*` que carga Next.js, por ejemplo `.env.local` | Ejecutar la UI fuera de Docker, según su guía local | No |
+| Archivos `*.example` del repositorio | Documentar nombres y ejemplos de valores, nunca los secretos reales | Se versiona la plantilla, no se sincronizan sus valores automáticamente |
+| Dokploy → Boero staging → Environment | Valores efectivos del stack: DB, JWT, mail, storage, URLs, versiones y límites | Es la fuente privada de runtime de este staging |
+| Environment de Traefik y su archivo DNS privado | Resolver DNS-01 de Cloudflare y renovar TLS | Sólo lo recibe Traefik; no API/UI |
+| GitHub → environment `staging` de cada aplicación | Credenciales para que Actions solicite el deploy | Sólo las usa ese job, no la aplicación |
 
-## DNS y certificados, sin extras de pago
+**Por qué `.env.dev` es opcional:** `make dev` puede usar los defaults del Compose
+local sin ese archivo. Si existe, se usa tanto para interpolar `${VARIABLE}` en el YAML como
+para el `env_file` del servicio local. No implica que los secretos de staging sean
+opcionales. Sin `--env-file`, Compose puede cargar `.env` para interpolación; eso
+no lo inyecta entero en los contenedores. Las variables exportadas en la shell
+también pueden intervenir. Un `.env` genérico no se convierte por su nombre en
+configuración del servidor: cada herramienta carga sus propios archivos. Consultar las guías de
+[API](https://github.com/TypeItOrg/boero-api/tree/staging) y
+[UI](https://github.com/TypeItOrg/boero-ui/blob/staging/docs/DESARROLLO.md) para ejecución nativa.
+
+En staging, Dokploy suministra los valores al ejecutar Compose. Las expresiones
+`${...}` del YAML los resuelven y cada bloque `environment` determina qué recibe
+su contenedor: **no se entrega todo el Environment a todos los servicios**. Por
+ejemplo, UI recibe `BOERO_API_URL=http://api:8080`; las credenciales DB van a API y
+PostgreSQL, no al navegador. `DB_NAME` es la base de negocio; no sustituirlo por el
+`POSTGRES_DB=postgres` que utiliza el servicio PostgreSQL de infraestructura.
+
+### Build no es runtime
+
+- **Build:** Actions ejecuta los Dockerfiles y genera artefactos. Los `.env` privados
+  están excluidos del contexto Docker; no se empaqueta el Environment de Dokploy.
+- **Runtime:** al crear los contenedores, Compose les pasa los valores del panel.
+  Cambiar mail/URLs u otra variable de runtime exige **redeploy**; editar el campo
+  o reiniciar el mismo contenedor no vuelve a crear su entorno.
+- Lo que se incorpore al bundle del navegador durante `next build` —por ejemplo,
+  una variable `NEXT_PUBLIC_*` que consuma el código— requiere **rebuild y publicación
+  de otra imagen**. No se corrige después cambiando una variable del contenedor.
+  Los secretos nunca deben ir en una variable pública.
+- Una variable nueva requiere consumidor en la aplicación, paso explícito en
+  Compose si corresponde, plantilla actualizada y valor real en Dokploy. Cambiar
+  sólo `.env.dokploy.staging.example` no cambia el servidor.
+
+## 3. Dominios, proxy y certificados
+
+Son tres cosas distintas: **DNS** permite encontrar el servidor; **certificado TLS**
+protege HTTPS y acredita el hostname; **proxy** recibe y reenvía la petición.
+Tener wildcard DNS no configura por sí solo HTTPS ni la selección de institución.
+
+### DNS y certificados, sin extras de pago
 
 | Nombre | Registro | Cloudflare proxy |
 |---|---|---|
@@ -105,15 +192,166 @@ expone la IP y no tiene el proxy/WAF de Cloudflare. Un certificado wildcard de
 Let's Encrypt en Traefik protege su HTTPS **sin ocultar la IP**. No activar ACM,
 DNS Providers Enterprise ni otros complementos pagos.
 
+Con proxy hay dos tramos HTTPS: navegador → Cloudflare usa su certificado del edge;
+Cloudflare → Traefik usa el certificado del origen. En DNS-only el navegador llega
+directamente a Traefik y utiliza el certificado Let's Encrypt del origen.
+
 Traefik solicita `staging.typeit.com.ar` + `*.staging.typeit.com.ar` por DNS-01.
 El token va en un archivo privado del host, disponible al **Traefik de Dokploy**;
 no en Environment de Boero, etiquetas ni secrets de Actions. Ver
 `deploy/dokploy/traefik.env.example`. Persistir y respaldar también el almacenamiento
 ACME; sus archivos y el token son privados, no material de diagnóstico para publicar.
 
-## Configuración única en Dokploy
+### Subdominios institucionales automáticos
 
-Crear un servicio **Docker Compose** desde este repositorio, con el archivo
+Con wildcard DNS + TLS + router ya configurados, editar `publicSubdomain` desde la
+administración de una institución activa basta para que su hostname funcione.
+No crear un registro/certificado/proxy por institución. La aplicación ya valida
+formato, unicidad y nombres reservados; desconocidos/inactivos no son instituciones
+válidas. El nombre de la institución no se convierte automáticamente en subdominio.
+Renombrar rompe el enlace anterior; no promete alias ni redirecciones históricas.
+WebAuthn mantiene RP `staging.typeit.com.ar` y el origen general exacto; no sustituir
+orígenes por un wildcard. No hace falta modificar el código de la aplicación.
+
+## 4. Operación cotidiana
+
+La entrada habitual es el [panel de staging](https://deploy-staging.typeit.com.ar).
+La passkey registrada por el usuario protege su acceso al panel; es independiente
+del login institucional/plataforma y de las passkeys que se registren en Boero.
+El acceso con contraseña sigue disponible: registrar una passkey no lo deshabilita.
+
+| Quiero… | Acción mínima | Qué comprobar |
+|---|---|---|
+| Publicar código API o UI | Promover el cambio a su rama `staging`; dejar correr Actions | CI, publicación GHCR y despliegue nativo Dokploy, no sólo el HTTP del job |
+| Cambiar una variable de runtime | Editar Environment de Boero y hacer redeploy del Compose | Salud y función afectada; un reinicio no aplica un Environment nuevo |
+| Cambiar Compose | Publicar en la rama de `boero-infra` configurada en el proveedor Git de Dokploy y redeploy desde el panel | El archivo/configuración efectiva; no reemplazar valores privados con ejemplos |
+| Ver una falla | Revisar Deployments y Logs del Compose, luego UI/API según el error | El mensaje de la aplicación y sus healthchecks; no publicar logs con secretos |
+| Cambiar reglas HTTP | Versionar el cambio y aplicarlo al archivo montado del host mediante el panel u operación autorizada | Git no lo instala automáticamente; dinámica: recarga del file provider; estática/Environment: recreación del proxy con ventana |
+| Volver a una versión | Fijar ambos tags `sha-<commit>` conocidos y redeploy | Compatibilidad de base y salud; no hay rollback automático ni reversión Flyway |
+| Comprobar backup diario | Consultar `boero-backup@staging.timer` y el resultado del servicio | Timer activo, último `Result=success` y archivo validado, no sólo unidad instalada |
+
+No usar los antiguos `make deploy-*`, `bootstrap`, `rollback-*`, `down` ni sus
+scripts para administrar el stack migrado. El marker
+`.deploy/staging/dokploy-managed` impide esas mutaciones legacy. SSH queda para
+mantenimiento autorizado del host, no para desplegar cada versión de aplicación.
+
+**Configuración Traefik y Git no son el mismo estado:** el YAML de
+`deploy/dokploy/` es la fuente versionada, pero el proxy lee su archivo montado en
+el host. Publicar ese YAML o redeployar el Compose de Boero no lo copia allí.
+Aplicar el cambio conservando las reglas ya instaladas y luego comprobar la
+recarga dinámica; para configuración estática, acordar la recreación del proxy.
+
+### Secrets de Actions y promoción entre ramas
+
+Secrets del environment `staging` en **ambos** repositorios:
+
+| Secret | Valor |
+|---|---|
+| `DOKPLOY_URL` | `https://deploy-staging.typeit.com.ar` |
+| `DOKPLOY_API_KEY` | Credencial Dokploy dedicada y privada para Actions |
+| `DOKPLOY_STAGING_COMPOSE_ID` | ID del mismo servicio Compose de Boero staging |
+
+El 2026-10-20 se verificó la eliminación de exactamente `DEPLOY_HOST`, `DEPLOY_PORT`,
+`DEPLOY_USER`, `DEPLOY_SSH_KEY` y `DEPLOY_SSH_KNOWN_HOSTS` de los environments
+`staging` de `boero-api` y `boero-ui`. Se conservaron los tres secrets Dokploy de
+la tabla; no se modificaron los environments de producción/QA.
+
+No cambiar secrets de producción/QA. No bloquear este endpoint detrás de una
+pantalla de login de Cloudflare Access que Actions no pueda atravesar. La API key
+es privilegiada: no imprimir respuestas ni habilitar trazas shell que la muestren.
+En v0.30.8 hereda el rol de su usuario: una clave del owner es administrativa,
+no se limita a `compose.deploy` ni a un Compose concreto. Usar una clave dedicada
+permite revocarla por separado, no reduce sus permisos.
+
+Los cambios de workflows se publicaron en la rama `staging`. Conservarlos al
+integrar la próxima promoción desde `develop`, mediante el flujo Git acordado;
+no sobrescribir ni forzar ramas para sincronizarlas. Esta migración no propagó
+los commits a `develop` ni incorporó sus cambios funcionales pendientes.
+
+## 5. Datos, persistencia y backups
+
+Las imágenes y los contenedores pueden cambiar; los datos viven fuera de ellos,
+en estos **volúmenes externos existentes**. Un redeploy debe reutilizarlos.
+
+| Volumen | Contenido / montaje | Precaución |
+|---|---|---|
+| `boero-api-postgres-data-staging` | PostgreSQL 18 en `/var/lib/postgresql` | Datos de negocio; nunca dos PostgreSQL sobre él a la vez |
+| `boero-api-redis-data-staging` | Persistencia Redis en `/data` | No vaciar para arreglar un deploy: puede afectar sesiones/revocaciones |
+| `boero-api-enrollment-storage-staging` | Adjuntos locales en `/app/storage` | Necesita respaldo de archivos además del dump PostgreSQL |
+| `boero-api-logs-staging` | Logs de API en `/app/logs` | No sustituye los datos ni una estrategia de backup |
+| `boero-ui-next-cache-staging` | Caché Next en `/app/.next/cache` | Es caché regenerable; se conservó durante el corte, no es la base ni los adjuntos |
+
+El File Mount `postgres-entrypoint.sh` es configuración, no una copia de la base.
+`api-storage-init` prepara permisos del volumen de archivos antes de API; su salida
+exitosa no demuestra por sí sola que una carga/descarga funcional haya pasado.
+
+### Qué respaldo existe y qué no
+
+Se conserva `make backup-db ENV=staging`: localiza exactamente un PostgreSQL vivo
+por su volumen histórico y label de servicio, sin duplicar secretos de Dokploy.
+Guarda dumps 0600 y valida con `pg_restore --list` antes de rotar; eso no sustituye
+un ensayo de restauración. `.env.staging` ya no es obligatorio para ese backup;
+`BACKUP_DIR` y `BACKUP_RETENTION_DAYS` pueden configurarse en el servicio systemd.
+Mantener el checkout operativo de `/opt/boero-infra` para este backup y habilitar
+`boero-backup@staging.timer` sólo después de ejecutar exitosamente el servicio.
+El timer no coordina un lock con Dokploy: no programar un corte simultáneo.
+
+El timer ya quedó activo y el último servicio finalizó correctamente. Programa el
+backup diariamente a las 02:15 del reloj del servidor, con demora aleatoria máxima
+de 15 minutos y recuperación de ejecuciones perdidas. Sin overrides, los dumps se
+guardan en `/var/backups/boero/staging` con retención de siete días; la limpieza sólo
+se ejecuta después de validar un dump nuevo. No borrar el archivo de lock para
+forzar una ejecución. El servicio `oneshot` puede quedar `inactive/dead` después de
+un éxito: revisar `Result`/`ExecMainStatus`, no confundirlo con un timer inactivo.
+
+Los respaldos locales no cubren la pérdida del disco/host. Conservar además una
+copia fuera de la máquina sin contratar servicios adicionales; PostgreSQL no incluye
+los adjuntos locales, que necesitan su propio respaldo recuperable.
+
+## 6. Límites y diferencias aceptadas o pendientes
+
+- El hostname general sólo admite peers Cloudflare; instituciones DNS-only usan
+  la IP de conexión. No confiar en headers CF enviados directamente por un cliente.
+  Los rangos oficiales CF necesitan mantenerse actualizados.
+- Las rutas públicas `/actuator` y `/api/v1` pasan de 404 a **403**, sin llegar a API.
+- Rate limits por router/instancia y solicitudes en vuelo no equivalen a las zonas
+  compartidas/conexiones de Nginx. Se conservan límites básicos, no una equivalencia
+  exacta del contador global.
+- El límite de cuerpo de 32 MiB requiere buffering en POST/PUT/PATCH. También
+  puede demorar respuestas de Server Actions; GET de descargas/SSE no lo usa.
+  Validar formularios, carga y descarga de adjuntos, y navegación antes de aceptar.
+- Detrás de CF, Traefik puede entregar `X-Real-IP` del edge: la UI actual lo prefiere
+  para metadatos de autenticación. Afecta la IP mostrada en Sesiones, no la decisión
+  de autenticación ni los límites del proxy. No afirmar paridad de esa IP con Nginx.
+  El usuario aceptó esta diferencia exclusivamente en staging; no extender esa
+  aceptación a producción.
+- El wildcard DNS-only expone el origen; un certificado válido no lo oculta.
+  No habilitar proxy Cloudflare para esos hostnames sin resolver primero el TLS
+  del edge. No contratar ACM u otros extras para este staging.
+- Mantener Docker Cleanup desactivado mientras se conserve la vuelta legacy. Su
+  limpieza global puede borrar contenedores detenidos, imágenes y redes necesarios;
+  no ejecutar prune ni borrar volúmenes por iniciativa.
+- La API key de Actions tiene los permisos de su usuario Dokploy. Una clave
+  dedicada del owner sigue siendo administrativa; no presentarla como limitada
+  al deploy de Boero. Su protección y eventual revocación son importantes.
+
+## 7. Qué se retiró del flujo staging y qué se conserva
+
+- **Sale del flujo staging:** SSH desde CI, git pull remoto, edición de hashes en
+  `.env`, locks/rollback del deploy shell y operación manual Nginx/Certbot.
+- **Queda:** Actions/GHCR, Dockerfiles, Compose base, perfiles, cinco volúmenes,
+  secretos actuales y backup validado. Las variables locales `.env.dev` no cambian.
+- **No borrar todavía:** scripts compartidos, overlays legacy y ejemplos Nginx:
+  producción/QA o el plan de vuelta aún los usan. Eliminar su uso en staging no
+  autoriza eliminarlos para todos los ambientes.
+
+## Apéndice A. Configuración instalada y reconstrucción
+
+Referencia técnica para entender o reconstruir lo instalado. **No son tareas
+pendientes ni instrucciones para volver a instalar el servidor operativo.** Para
+la operación habitual, usar la sección de operación cotidiana.
+
+El servicio **Docker Compose** toma este repositorio y el archivo
 `compose.dokploy.staging.yaml`. Éste extiende `compose.yaml`; ambos deben estar en
 el checkout. No combinarlo con `compose.staging.yaml`. No activar isolated
 deployments ni dominios autogenerados sobre el servicio: las reglas Boero están en
@@ -131,6 +369,9 @@ el archivo dinámico de Traefik.
    Compose lo referencia como `../files/postgres-entrypoint.sh`; no pegar ese
    prefijo en el campo del panel. No depender del bind al checkout
    Git descartable ni permitir que Docker cree un directorio en lugar del archivo.
+   El File Mount conserva una copia gestionada: si cambia el entrypoint en Git,
+   actualizar también su contenido en Dokploy antes del redeploy; publicar el
+   archivo del repositorio no actualiza esa copia automáticamente.
 4. Verificar los cinco volúmenes externos existentes y la red
    `boero-network-staging`. No crear una base vacía sustituta si falta un volumen.
    Sólo UI se conecta además a `dokploy-network`, con alias `boero-ui-staging`.
@@ -153,25 +394,11 @@ el archivo dinámico de Traefik.
 de iniciarla. Conserva archivos, corrige permisos y usa la misma imagen que API;
 no corre como parte de un paso SSH ni requiere credenciales de aplicación.
 
-### Diferencias HTTP que hay que comprobar antes de aceptar
+## Apéndice B. Historial y receta del corte inicial
 
-- El hostname general sólo admite peers Cloudflare; instituciones DNS-only usan
-  la IP de conexión. No confiar en headers CF enviados directamente por un cliente.
-  Los rangos oficiales CF necesitan mantenerse actualizados.
-- Las rutas públicas `/actuator` y `/api/v1` pasan de 404 a **403**, sin llegar a API.
-- Rate limits por router/instancia y solicitudes en vuelo no equivalen a las zonas
-  compartidas/conexiones de Nginx. Se conservan límites básicos, no una equivalencia
-  exacta del contador global.
-- El límite de cuerpo de 32 MiB requiere buffering en POST/PUT/PATCH. También
-  puede demorar respuestas de Server Actions; GET de descargas/SSE no lo usa.
-  Validar formularios, carga y descarga de adjuntos, y navegación antes de aceptar.
-- Detrás de CF, Traefik puede entregar `X-Real-IP` del edge: la UI actual lo prefiere
-  para metadatos de autenticación. Afecta la IP mostrada en Sesiones, no la decisión
-  de autenticación ni los límites del proxy. No afirmar paridad de esa IP con Nginx.
-  El usuario aceptó esta diferencia exclusivamente en staging; no extender esa
-  aceptación a producción.
-
-## Corte: avisar primero, no ejecutar como parte de una prueba
+El corte ya fue realizado el 2026-10-20. Se conserva esta receta para entender las
+precauciones y la vuelta, **no para ejecutarla de nuevo ni para tocar producción/QA**.
+Otra instalación o un nuevo corte exige revisar el host y acordar otra ventana.
 
 La instalación estándar requiere libres **80, 443 y 3000**. En el stack legacy
 los ocupaban Nginx y UI; instalar Dokploy no es un paso inocuo previo a la ventana.
@@ -230,71 +457,7 @@ iniciativa: puede borrar escrituras nuevas; requiere una decisión explícita.
 Sólo después de detener el stack nuevo y decidir volver al flujo legacy, retirar
 el marker bajo el lock. No quitarlo para forzar un despliegue normal.
 
-## Actions y operación cotidiana
-
-Secrets del environment `staging` en **ambos** repositorios:
-
-| Secret | Valor |
-|---|---|
-| `DOKPLOY_URL` | `https://deploy-staging.typeit.com.ar` |
-| `DOKPLOY_API_KEY` | Credencial Dokploy dedicada y privada para Actions |
-| `DOKPLOY_STAGING_COMPOSE_ID` | ID del mismo servicio Compose de Boero staging |
-
-El 2026-10-20 se verificó la eliminación de exactamente `DEPLOY_HOST`, `DEPLOY_PORT`,
-`DEPLOY_USER`, `DEPLOY_SSH_KEY` y `DEPLOY_SSH_KNOWN_HOSTS` de los environments
-`staging` de `boero-api` y `boero-ui`. Se conservaron los tres secrets Dokploy de
-la tabla; no se modificaron los environments de producción/QA.
-
-No cambiar secrets de producción/QA. No bloquear este endpoint detrás de una
-pantalla de login de Cloudflare Access que Actions no pueda atravesar. La API key
-es privilegiada: no imprimir respuestas ni habilitar trazas shell que la muestren.
-En v0.30.8 hereda el rol de su usuario: una clave del owner es administrativa,
-no se limita a `compose.deploy` ni a un Compose concreto. Usar una clave dedicada
-permite revocarla por separado, no reduce sus permisos.
-
-Los cambios de workflows se publicaron en la rama `staging`. Conservarlos al
-integrar la próxima promoción desde `develop`, mediante el flujo Git acordado;
-no sobrescribir ni forzar ramas para sincronizarlas. Esta migración no propagó
-los commits a `develop` ni incorporó sus cambios funcionales pendientes.
-
-Operar despliegues, logs, estado y cambios de variables desde Dokploy. Para rollback,
-fijar los dos tags SHA conocidos en Environment y redeploy; revisar compatibilidad
-de la base antes. No usar los antiguos `make deploy-*`, `bootstrap`, `rollback-*`,
-`down` ni sus scripts para administrar el stack migrado.
-
-Se conserva `make backup-db ENV=staging`: localiza exactamente un PostgreSQL vivo
-por su volumen histórico y label de servicio, sin duplicar secretos de Dokploy.
-Guarda dumps 0600 y valida con `pg_restore --list` antes de rotar; eso no sustituye
-un ensayo de restauración. `.env.staging` ya no es obligatorio para ese backup;
-`BACKUP_DIR` y `BACKUP_RETENTION_DAYS` pueden configurarse en el servicio systemd.
-Mantener el checkout operativo de `/opt/boero-infra` para este backup y habilitar
-`boero-backup@staging.timer` sólo después de ejecutar exitosamente el servicio.
-El timer no coordina un lock con Dokploy: no programar un corte simultáneo.
-
-Los respaldos locales no cubren la pérdida del disco/host. Conservar además una
-copia fuera de la máquina sin contratar servicios adicionales; PostgreSQL no incluye
-los adjuntos locales, que necesitan su propio respaldo recuperable.
-
-## Subdominios automáticos
-
-Con wildcard DNS + TLS + router ya configurados, editar `publicSubdomain` desde la
-administración de una institución activa basta para que su hostname funcione.
-No crear un registro/certificado/proxy por institución. La aplicación ya valida
-formato, unicidad y nombres reservados; desconocidos/inactivos no son instituciones
-válidas. El nombre de la institución no se convierte automáticamente en subdominio.
-Renombrar rompe el enlace anterior; no promete alias ni redirecciones históricas.
-WebAuthn mantiene RP `staging.typeit.com.ar` y el origen general exacto; no sustituir
-orígenes por un wildcard. No hace falta modificar el código de la aplicación.
-
-## Qué se retira y qué queda
-
-- **Sale del flujo staging:** SSH desde CI, git pull remoto, edición de hashes en
-  `.env`, locks/rollback del deploy shell y operación manual Nginx/Certbot.
-- **Queda:** Actions/GHCR, Dockerfiles, Compose base, perfiles, cinco volúmenes,
-  secretos actuales y backup validado. Las variables locales `.env.dev` no cambian.
-- **No borrar todavía:** scripts compartidos, overlays legacy y ejemplos Nginx:
-  producción/QA o el plan de vuelta aún los usan. Eliminar su uso en staging no
-  autoriza eliminarlos para todos los ambientes.
+## Referencias
 
 Fuentes: [instalación](https://docs.dokploy.com/docs/core/installation),
 [Compose](https://docs.dokploy.com/docs/core/docker-compose),
