@@ -16,10 +16,12 @@ manifests de plataforma contra los SHA publicados. El usuario confirmó ingreso 
 datos. El puerto 3000 está cerrado; el panel sólo se publica por HTTPS. El backup
 diario PostgreSQL está activo y su servicio produjo un dump validado.
 
-**Pendientes humanos de cierre:** activar 2FA del administrador, aceptar o resolver
-la diferencia de IP mostrada en Sesiones y confirmar el retiro de los secrets SSH
-legacy de ambos environments staging. No se probaron passkeys ni carga/descarga
-funcional de adjuntos durante esta verificación; no afirmar equivalencia completa.
+**Pendiente humano de cierre:** configurar la autenticación reforzada de la cuenta
+owner de Dokploy. En esta intervención no se registró ninguna passkey ni se activó
+TOTP. La limpieza de secrets SSH legacy de ambos environments staging está
+completada. El usuario aceptó la diferencia de IP mostrada en Sesiones exclusivamente
+para staging. No se probaron passkeys de Boero ni carga/descarga funcional de adjuntos
+durante esta verificación; no afirmar equivalencia completa.
 
 Se validó una restauración PostgreSQL aislada y se conservaron fuera del host el
 dump final, configuración y copias offline de los cinco volúmenes. El wildcard
@@ -165,8 +167,9 @@ no corre como parte de un paso SSH ni requiere credenciales de aplicación.
   Validar formularios, carga y descarga de adjuntos, y navegación antes de aceptar.
 - Detrás de CF, Traefik puede entregar `X-Real-IP` del edge: la UI actual lo prefiere
   para metadatos de autenticación. Afecta la IP mostrada en Sesiones, no la decisión
-  de autenticación ni los límites del proxy. No afirmar paridad de esa IP con Nginx;
-  resolver o aceptar expresamente esta diferencia antes del corte definitivo.
+  de autenticación ni los límites del proxy. No afirmar paridad de esa IP con Nginx.
+  El usuario aceptó esta diferencia exclusivamente en staging; no extender esa
+  aceptación a producción.
 
 ## Corte: avisar primero, no ejecutar como parte de una prueba
 
@@ -236,6 +239,11 @@ Secrets del environment `staging` en **ambos** repositorios:
 | `DOKPLOY_URL` | `https://deploy-staging.typeit.com.ar` |
 | `DOKPLOY_API_KEY` | Credencial Dokploy dedicada y privada para Actions |
 | `DOKPLOY_STAGING_COMPOSE_ID` | ID del mismo servicio Compose de Boero staging |
+
+El 2026-10-20 se verificó la eliminación de exactamente `DEPLOY_HOST`, `DEPLOY_PORT`,
+`DEPLOY_USER`, `DEPLOY_SSH_KEY` y `DEPLOY_SSH_KNOWN_HOSTS` de los environments
+`staging` de `boero-api` y `boero-ui`. Se conservaron los tres secrets Dokploy de
+la tabla; no se modificaron los environments de producción/QA.
 
 No cambiar secrets de producción/QA. No bloquear este endpoint detrás de una
 pantalla de login de Cloudflare Access que Actions no pueda atravesar. La API key
