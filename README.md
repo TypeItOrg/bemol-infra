@@ -5,13 +5,6 @@
 
 </p>
 
-## Operación
-
-- [Staging con Dokploy y Traefik](docs/DOKPLOY-STAGING.md)
-- [Staging anterior con Nginx/SSH](docs/STAGING.md)
-- [Preparación de producción](docs/PRODUCTION.md)
-- [Aceptación institucional local](docs/institutional-access-checklist.md)
-
 <!-- Tecnologías: Infraestructura & Servicios -->
 <p align="center">
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose" /></a>
