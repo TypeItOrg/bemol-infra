@@ -433,12 +433,12 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
 
     def test_publication_gates(self):
         for repo, expected in ((API, "[static-analysis, test]"), (UI, "verify")):
-            workflow = (repo / ".github/workflows/ci.yaml").read_text()
+            workflow = (repo / ".github/workflows/ci-staging.yaml").read_text()
             publish = job(workflow, "publish-image")
             self.assertEqual(scalar(publish, 4, "needs"), expected)
             for event in ("push", "pull_request", "workflow_dispatch"):
                 for ref in ("develop", "staging", "main", "feature/example"):
-                    self.assertEqual(condition(publish, event, ref), event == "push" and ref in ("develop", "staging", "main"))
+                    self.assertEqual(condition(publish, event, ref), event == "push" and ref == "staging")
             self.assertIn("sha-${{ github.sha }}", publish)
             self.assertIn("push: true", publish)
             if repo == API:
@@ -452,13 +452,11 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
 
     def test_existing_flows(self):
         for repo in (API, UI):
-            workflow_path = ".github/workflows/ci.yaml"
-            before = command(["git", "show", "HEAD:" + workflow_path], repo).stdout
-            after = (repo / workflow_path).read_text()
-            self.assertEqual(before.replace(job(before, "deploy-staging"), ""),
-                             after.replace(job(after, "deploy-staging"), ""))
-            production_path = ".github/workflows/deploy-production.yaml"
-            self.assertEqual(command(["git", "show", "HEAD:" + production_path], repo).stdout, (repo / production_path).read_text())
+            workflows = repo / ".github/workflows"
+            workflow = (workflows / "ci-staging.yaml").read_text()
+            self.assertEqual(scalar(workflow, 0, "name"), "CI and staging deployment")
+            for removed in ("ci.yaml", "deploy-qa.yaml", "deploy-production.yaml"):
+                self.assertFalse((workflows / removed).exists(), removed)
         values = synthetic_env() | {
             "AUTO_LOGIN_ENABLED": "true",
             "AUTO_LOGIN_USER_ID": "00000000-0000-0000-0000-000000000001",
@@ -497,7 +495,7 @@ sys.exit(int(os.environ.get('CURL_EXIT', '0')))
                                                     "DOKPLOY_TRACE": str(request), "GITHUB_SHA": NEW_SHA,
                                                     "GITHUB_REPOSITORY": "typeitorg/boero-synthetic"}
         for repo in (API, UI):
-            workflow = (repo / ".github/workflows/ci.yaml").read_text()
+            workflow = (repo / ".github/workflows/ci-staging.yaml").read_text()
             deploy = job(workflow, "deploy-staging")
             self.assertEqual(scalar(deploy, 4, "needs"), "publish-image")
             self.assertEqual(scalar(deploy, 4, "environment"), "staging")

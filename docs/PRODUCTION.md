@@ -1,6 +1,6 @@
 # Preparación de producción
 
-Producción está preparada estructuralmente, pero nunca tuvo una VPS provisionada y permanece inactiva. Staging sí está provisionado en un servidor autohosteado. Se conservan las configuraciones de ambos ambientes, pero no debe ejecutarse `make bootstrap ENV=production` ni el workflow manual hasta disponer de infraestructura productiva y completar este documento.
+Producción conserva una configuración preliminar, pero nunca tuvo una VPS provisionada y permanece inactiva. No existe un workflow de despliegue productivo; `main` sólo ejecuta CI y no publica imágenes. Staging sí está provisionado con Dokploy. El resto de esta página es un borrador legacy para revisar cuando se prepare producción, no un procedimiento listo para ejecutar. No ejecutar `make bootstrap ENV=production` hasta definir ese ambiente y completar su preparación.
 
 ## Topología prevista
 
@@ -77,7 +77,7 @@ Crear `production` en `boero-ui` y `boero-api` únicamente cuando exista el serv
 - Configurar `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` y `DEPLOY_SSH_KNOWN_HOSTS`.
 - Usar una clave y usuario diferentes de staging.
 
-Los workflows `Deploy production` son manuales. Solicitan un SHA completo, comprueban que pertenece a `main` y luego esperan la aprobación del Environment antes de conectarse a la VPS.
+Los antiguos workflows `Deploy production` fueron retirados. Cuando se prepare producción, definir y validar su publicación de imágenes y su despliegue protegido por aprobación. La propuesta de acceso SSH de este borrador también debe revisarse frente a la operación actual con Dokploy; no crear secrets ni habilitar despliegues por iniciativa.
 
 ## Checklist obligatorio antes del release
 
@@ -101,12 +101,14 @@ Backups, TLS y monitoreo no están implementados todavía. Son bloqueantes expl�
 
 ## Primer release
 
+Este checklist sólo aplica después de implementar y validar el pipeline productivo; hoy no existe.
+
 1. Promover y validar los commits candidatos en `main`.
-2. Confirmar que CI publicó ambos `sha-<commit>`.
+2. Confirmar que el pipeline productivo definido para entonces publicó ambos `sha-<commit>`.
 3. Registrar versiones actuales y comprobar el último backup restaurable.
-4. Ejecutar manualmente `Deploy production` para API.
+4. Desplegar API mediante el flujo productivo aprobado.
 5. Validar readiness, migraciones y funciones críticas.
-6. Ejecutar manualmente `Deploy production` para UI.
+6. Desplegar UI mediante el flujo productivo aprobado.
 7. Ejecutar smoke tests externos y observar métricas/logs.
 8. Registrar los SHA finales y el resultado del release.
 

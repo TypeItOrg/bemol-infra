@@ -264,11 +264,17 @@ no se limita a `compose.deploy` ni a un Compose concreto. Usar una clave dedicad
 permite revocarla por separado, no reduce sus permisos.
 
 Al retirar QA, los workflows de `develop` y `staging` se alinean con el despliegue
-Dokploy. Un push a `develop` valida y publica imágenes, pero no despliega un
-ambiente remoto; sólo `staging` solicita este deploy. Se retira `Deploy QA` en
-ambas ramas, sin promover cambios funcionales entre ellas ni modificar el flujo
-manual de producción. Conservar esta configuración en las siguientes promociones;
-no sobrescribir ni forzar ramas para sincronizarlas.
+Dokploy. Un push a `develop` valida el código, pero no publica imágenes ni
+despliega un ambiente remoto: su ejecución sigue siendo local. Sólo un push a
+`staging` publica imágenes y solicita este deploy; `main` también queda sólo con
+CI. Se retira `Deploy QA` en ambas ramas. El workflow se llama
+**CI and staging deployment** y vive en `.github/workflows/ci-staging.yaml` en
+ambas aplicaciones. El archivo es igual en `develop` y `staging`; sus condiciones
+usando `github.ref_name` determinan qué jobs pueden ejecutarse. No hay workflow
+de despliegue a producción mientras ese
+ambiente no exista; su configuración futura de infraestructura se conserva.
+Conservar esta configuración en las siguientes promociones; no sobrescribir ni
+forzar ramas para sincronizarlas.
 
 ### Retiro de QA del 2026-10-20
 

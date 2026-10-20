@@ -116,8 +116,8 @@ La clave pública correspondiente debe existir en `authorized_keys` del usuario 
 
 ## Despliegue automático
 
-Según `boero-api/.github/workflows/ci.yaml` y
-`boero-ui/.github/workflows/ci.yaml`, un push a `staging`:
+En los workflows legacy de API/UI, un push a `staging` seguía este flujo.
+Los actuales `.github/workflows/ci-staging.yaml` usan Dokploy y no estos pasos:
 
 1. Ejecuta las validaciones de CI.
 2. Publica `ghcr.io/typeitorg/<app>:sha-<commit>`.
