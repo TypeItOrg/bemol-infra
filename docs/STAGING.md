@@ -15,8 +15,7 @@ Los workflows anteriores de UI y API ejecutaban `deploy-staging` para
 checkout anterior, no confirma qué revisión está activa en GitHub ni la salud del servidor.
 Los workflows de staging ya publicados reemplazan el paso SSH por la API de
 Dokploy. No usar el procedimiento anterior sobre el stack migrado.
-Se conservan Compose, perfiles, ejemplos y comandos de staging/producción; la
-incorporación de QA no cambia sus disparadores.
+Se conservan Compose, perfiles, ejemplos y comandos de staging/producción.
 
 ## Arquitectura
 
@@ -241,7 +240,7 @@ de staging pasa las tres variables a la API y sólo la bandera a la UI, junto co
 La funcionalidad es genérica para entornos no productivos: la API expone
 `POST /api/v1/auth/login/auto` sólo con la bandera activa y sin perfiles `prod` ni
 `production`, incluso en combinaciones de perfiles. La UI exige `DEPLOYMENT_ENV`
-explícito y distinto de `prod` y `production`. Producción y QA no reciben estas
+explícito y distinto de `prod` y `production`. Producción no recibe estas
 opciones del Compose base; los overlays actuales sólo las pasan en staging.
 
 La UI sólo inicia este acceso para un GET de `/` en el host HTTPS exacto de

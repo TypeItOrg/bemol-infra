@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "completionBoundary": "local-only",
   "requirements": {
     "Q01": [
@@ -7,11 +7,11 @@
       "isolated-runtime"
     ],
     "Q02": [
-      "qa-profile",
+      "persistent-readiness",
       "flyway-health"
     ],
     "Q03": [
-      "qa-operations",
+      "legacy-operations",
       "backup-restore"
     ],
     "Q04": [
@@ -21,9 +21,6 @@
     "C01": [
       "publication-gates",
       "existing-flows"
-    ],
-    "C02": [
-      "manual-qa-only"
     ],
     "I01": [
       "domain-invariant",
@@ -233,12 +230,6 @@
     "Q01.isolated-compose": [
       "configuration"
     ],
-    "Q02.qa-profile": [
-      "configuration"
-    ],
-    "Q03.qa-operations": [
-      "configuration"
-    ],
     "Q04.invalid-input": [
       "configuration"
     ],
@@ -249,9 +240,6 @@
       "configuration"
     ],
     "C01.existing-flows": [
-      "configuration"
-    ],
-    "C02.manual-qa-only": [
       "configuration"
     ],
     "D01.configuration-runbook": [
@@ -268,6 +256,12 @@
     ],
     "V01.stale-evidence": [
       "verifier-test"
+    ],
+    "Q02.persistent-readiness": [
+      "configuration"
+    ],
+    "Q03.legacy-operations": [
+      "configuration"
     ]
   },
   "requiredScreenshots": {
@@ -287,11 +281,13 @@
   "sourcePaths": {
     "Q01": [
       "infra/compose.yaml",
-      "infra/compose.qa.yaml"
+      "infra/compose.staging.yaml",
+      "infra/compose.production.yaml",
+      "infra/compose.dokploy.staging.yaml"
     ],
     "Q02": [
-      "api/src/main/resources/application-qa.properties",
-      "infra/docker/postgres-entrypoint.sh"
+      "infra/docker/postgres-entrypoint.sh",
+      "infra/scripts/verification/runtime.py"
     ],
     "Q03": [
       "infra/Makefile",
@@ -302,15 +298,11 @@
     "Q04": [
       "infra/scripts/deploy-service.sh",
       "infra/scripts/rollback-service.sh",
-      "infra/tests/qa-config.test.py"
+      "infra/tests/infra-config.test.py"
     ],
     "C01": [
       "api/.github/workflows/ci.yaml",
       "ui/.github/workflows/ci.yaml"
-    ],
-    "C02": [
-      "api/.github/workflows/deploy-qa.yaml",
-      "ui/.github/workflows/deploy-qa.yaml"
     ],
     "I01": [
       "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/institutional/entities/Institution.java",
@@ -366,9 +358,9 @@
       "infra/scripts/verification/run_acceptance.py"
     ],
     "D01": [
-      "infra/docs/QA.md",
-      "infra/docs/qa-institutional-access-checklist.md",
-      "infra/.env.qa.example",
+      "infra/docs/institutional-access-checklist.md",
+      "infra/docs/DOKPLOY-STAGING.md",
+      "infra/.env.dokploy.staging.example",
       "api/.env.dev.example",
       "ui/.env.example"
     ],

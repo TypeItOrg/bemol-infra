@@ -6,8 +6,8 @@ service="${2:-}"
 version="${3:-}"
 
 case "$environment" in
-  qa|staging|production) ;;
-  *) echo "Environment must be qa, staging or production" >&2; exit 1 ;;
+  staging|production) ;;
+  *) echo "Environment must be staging or production" >&2; exit 1 ;;
 esac
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -30,12 +30,6 @@ esac
 case "$commit_sha" in
   ""|*[!0-9a-f]*) echo "Version must contain a lowercase hexadecimal commit SHA" >&2; exit 1 ;;
 esac
-
-# Existing staging/production tooling accepts legacy short tags; QA only accepts full SHAs.
-if [ "$environment" = "qa" ] && [ "${#commit_sha}" -ne 40 ]; then
-  echo "QA version must contain a full 40-character commit SHA" >&2
-  exit 1
-fi
 
 env_file=".env.$environment"
 base_compose_file="compose.yaml"

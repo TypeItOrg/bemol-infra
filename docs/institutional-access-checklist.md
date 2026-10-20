@@ -1,21 +1,21 @@
-# QA y acceso institucional: contrato de aceptación
+# Acceso institucional: contrato de aceptación local
 
-Esta entrega está aprobada para implementación y verificación **local**. No autoriza
-DNS público, certificados públicos, despliegues remotos, producción, commits ni pushes.
+Este contrato corresponde a la verificación automatizada **local**. Ejecutar el
+harness no modifica DNS público ni ambientes compartidos, y no autoriza por sí
+solo despliegues remotos, cambios de producción, commits ni pushes.
 
 ## Decisiones
 
-- `ENV=qa`: UI, API, PostgreSQL, Redis, correo capturado, archivos y secretos propios.
-  Dominio público: `testing.typeit.com.ar`, siguiendo la convención de `staging.typeit.com.ar`.
-  El nombre interno `qa` se conserva; no se agrega una rama `testing`.
-- Se conservan `develop`, `staging` y `main`. Publicación de `develop` tras CI;
-  despliegue de QA manual por SHA. La política existente de staging no cambia.
+- Sólo quedan los ambientes compartidos `staging` y `production`; desarrollo local
+  sigue perteneciendo a los repositorios de aplicación. No se configura un ambiente
+  QA/testing ni un despliegue manual adicional.
 - `publicSubdomain` opcional e independiente de `slug`, administrado por plataforma.
 - Logos PNG/JPEG, máximo 2 MiB, administrados por plataforma o por una institución
   con `INSTITUTION_UPDATE`; almacenamiento y autorizaciones existentes se conservan.
 - Accesos generales conservan selector. Los institucionales fijan contexto, nombre
-  y logo: `cboero.testing.typeit.com.ar`, `cboero.staging.typeit.com.ar` y, en una
-  activación futura, `cboero.typeit.com.ar`.
+  y logo: `cboero.staging.typeit.com.ar` y, en una activación futura,
+  `cboero.typeit.com.ar`. `cboero.testing.typeit.com.ar` queda únicamente como
+  hostname sintético de los fixtures locales.
 
 ## Requisitos obligatorios
 
@@ -25,12 +25,11 @@ fallida, sin ejecutar o perteneciente a otro estado del código impide el cierre
 
 | ID | Criterio |
 | --- | --- |
-| Q01 | QA no comparte servicios, redes, puertos, volúmenes, archivos ni secretos con otros ambientes. |
-| Q02 | QA arranca con PostgreSQL/Flyway y healthchecks; no usa H2 ni create-drop. |
-| Q03 | Preflight, bootstrap, deploy, rollback, backup, estado, logs y apagado soportan QA. |
+| Q01 | Las configuraciones persistentes y los stacks descartables de aceptación conservan aislamiento de redes, volúmenes y secretos. |
+| Q02 | El harness local usa perfil `prod`, PostgreSQL/Flyway y healthchecks; no usa H2 ni create-drop. |
+| Q03 | Se conservan los contratos genéricos de operaciones legacy y backup/restore sobre datos descartables. |
 | Q04 | Ambiente/SHA inválidos, preflight fallido y despliegue no saludable no alteran otros ambientes. |
 | C01 | Develop publica sólo tras controles; PRs no publican; staging/main conservan sus flujos. |
-| C02 | Deploy manual acepta SHA completo y apunta exclusivamente a QA. |
 | I01 | Nombre público opcional, independiente, DNS-safe y reservado con unicidad PostgreSQL. |
 | I02 | Resolver público mínimo; nombres desconocidos/inactivos son 404, indisponibilidad es 503. |
 | A01 | Acceso general conserva selector y flujos; autenticación de plataforma se mantiene. |
@@ -48,11 +47,11 @@ fallida, sin ejecutar o perteneciente a otro estado del código impide el cierre
 
 ## Ejecución y cierre
 
-Desde `boero-infra`: `make verify-qa-institutional-access`. Los repositorios hermanos
+Desde `boero-infra`: `make verify-institutional-access`. Los repositorios hermanos
 pueden indicarse con `API_REPO` y `UI_REPO`. El comando no lee secretos de ambientes
 existentes ni reutiliza sus bases/volúmenes; sus recursos usan un namespace de aceptación.
 
-La evidencia se escribe en `build/verification/qa-institutional-access/`, ignorada por
+La evidencia se escribe en `build/verification/institutional-access/`, ignorada por
 Git. Debe contener estado por caso/ID, comandos, resultados, capturas y huella de los
 repositorios. Nunca incluir contraseñas, JWT, refresh tokens, cookies ni archivos privados.
 
@@ -61,18 +60,12 @@ Sólo se puede comunicar «implementación completa y verificada localmente; no
 desplegada» cuando todos los casos obligatorios pasan y la auditoría final vincula
 cada requisito con su código, prueba y evidencia. Un bloqueo no cuenta como éxito.
 
-## Activación pública posterior (fuera de esta entrega)
+## Separación respecto a los ambientes compartidos
 
-- Verificar capacidad, puertos, host y configuración efectiva antes de operar.
-- Configurar secretos independientes, GitHub Environment `qa` y sus credenciales;
-  el workflow manual debe existir en la rama predeterminada de GitHub.
-- Configurar DNS/HTTPS de QA y del acceso institucional de staging.
-- Aplicar la migración nueva por el procedimiento de despliegue con backup; no
-  editar el historial Flyway ni recrear una base persistente.
-- Configurar expresamente el nombre público `cboero` sobre la institución correcta;
-  no inferirlo de una semilla ni renombrar su slug.
-- Validar dominio, salud, correo, RP ID/orígenes y versión API/UI antes de habilitar acceso.
-- Producción y su dominio institucional requieren una activación separada.
+Este harness no configura DNS, secretos de Actions ni despliegues de ambientes.
+Staging se opera mediante [Dokploy](DOKPLOY-STAGING.md) y producción conserva su
+[preparación independiente](PRODUCTION.md). Cambiar configuración compartida,
+datos persistentes o activar producción requiere autorización separada.
 
 ## Qué ejecuta el verificador
 
@@ -90,8 +83,10 @@ Java 21/Gradle del proyecto y pnpm/dependencias instaladas en la UI.
    `ui-tests.json`, TypeScript y lint/formato sólo de los archivos cambiados.
 3. Construye imágenes `prod` de la API/UI actuales y crea **dos stacks descartables**
    propios, con TLS autofirmado y resolución de hosts únicamente dentro de Chromium.
-   Uno simula QA y otro el dominio de staging: ambos usan el perfil QA sin semillas
-   implícitas. No son los ambientes compartidos existentes. Las identidades sintéticas
+   Las claves `qa`/`staging` y el dominio `testing.typeit.com.ar` se conservan
+   únicamente como fixtures históricos consumidos por pruebas, no como ambientes
+   desplegables. Ambos stacks usan el perfil `prod`, correo capturado y secretos
+   sintéticos sin semillas implícitas. No son los ambientes compartidos existentes. Las identidades sintéticas
    de preparación se confirman sólo en estas bases; la prueba de registro confirma
    por separado un usuario nuevo mediante correo realmente capturado.
 4. Ejecuta la batería Playwright sin mocks: flujos Chromium (correo, logos, permisos,
@@ -100,7 +95,7 @@ Java 21/Gradle del proyecto y pnpm/dependencias instaladas en la UI.
    backup/restore en otra base **nueva**, nunca sobre una base existente.
 5. Elimina sólo recursos identificados por namespace, propietario e IDs completos
    de esa ejecución. Compara HEAD/index, entorno privado, migraciones previas y
-   recursos Docker preexistentes. Finalmente exige evidencia vigente para los 20 IDs.
+   recursos Docker preexistentes. Finalmente exige evidencia vigente para los 19 IDs.
 
 Cada ejecución guarda sus reportes normalizados en `runs/<run-id>/`. Los mapas
 registran nombres reales de pruebas: si una prueba se renombra, desaparece, se
@@ -126,3 +121,19 @@ aceptación quedan disponibles (no se eliminan imágenes ajenas). Opcionalmente
 `ACCEPTANCE_API_IMAGE`/`ACCEPTANCE_UI_IMAGE` reutilizan una imagen local sólo si sus
 etiquetas identifican la app y la huella exacta del árbol actual; una imagen antigua
 se rechaza. El comando no publica imágenes ni se conecta por SSH.
+
+## Disponibilidad actual y cambio de alcance
+
+El retiro del ambiente QA eliminó su overlay, plantilla, perfil y despliegue manual;
+no eliminó las pruebas institucionales ni el verificador de evidencia. Las pruebas
+infra usan ahora un workspace `production` sintético con Docker simulado. Se retiró
+sólo el requisito C02 de despliegue manual QA y se mantuvieron los contratos genéricos.
+El runtime local genera su overlay y Mailpit sin depender de `compose.qa.yaml` ni
+del perfil eliminado. Su backup usa un workspace privado `production`, no el
+selector de staging que apunta a un volumen histórico compartido.
+
+Conservar el driver no prueba que toda la batería sea ejecutable: en los checkouts
+actuales de UI no está presente la batería Playwright ni el script `test:acceptance`
+que consume el runner. Si falta algún consumidor registrado, el cierre debe quedar
+bloqueado; no sustituirlo por evidencia vieja ni ejecutar esta batería por iniciativa.
+La limpieza de configuración no incluye levantar estos stacks o validar su runtime.

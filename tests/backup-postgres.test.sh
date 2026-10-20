@@ -62,7 +62,7 @@ chmod +x "$test_dir/bin/docker"
 
 reset_case() {
   rm -rf "$test_dir/backups"
-  rm -f "$test_dir/.env.staging" "$test_dir/.env.qa" "$test_dir/.env.production"
+  rm -f "$test_dir/.env.staging" "$test_dir/.env.production"
   mkdir -p "$test_dir/backups/$1"
   old_archive="$test_dir/backups/$1/boero-$1-20000101T000000Z.dump"
   printf 'old archive\n' > "$old_archive"
@@ -90,7 +90,7 @@ assert_preserved() {
   [ -z "$(find "$test_dir/backups" -name '*.tmp' -print)" ]
 }
 
-for environment in qa production; do
+for environment in production; do
   reset_case "$environment"
   printf 'BACKUP_DIR=%s/backups\nBACKUP_RETENTION_DAYS=7\n' "$test_dir" > "$test_dir/.env.$environment"
   run_backup "$environment"

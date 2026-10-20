@@ -2,7 +2,7 @@
 
 **Estado: infraestructura migrada y operativa; validación funcional parcial.**
 Esta guía explica cómo funciona y cómo se opera staging desde la migración del
-2026-10-20 en el host `cristinet`. No modifica la operación de producción ni QA.
+2026-10-20 en el host `cristinet`. No modifica la operación de producción.
 
 Se instalaron Dokploy v0.30.8 y Traefik v3.6.25 durante una ventana autorizada.
 El primer arranque conservó las imágenes SHA, valores efectivos y cinco volúmenes
@@ -254,19 +254,21 @@ Secrets del environment `staging` en **ambos** repositorios:
 El 2026-10-20 se verificó la eliminación de exactamente `DEPLOY_HOST`, `DEPLOY_PORT`,
 `DEPLOY_USER`, `DEPLOY_SSH_KEY` y `DEPLOY_SSH_KNOWN_HOSTS` de los environments
 `staging` de `boero-api` y `boero-ui`. Se conservaron los tres secrets Dokploy de
-la tabla; no se modificaron los environments de producción/QA.
+la tabla; no se modificaron los environments de producción.
 
-No cambiar secrets de producción/QA. No bloquear este endpoint detrás de una
+No cambiar secrets de producción. No bloquear este endpoint detrás de una
 pantalla de login de Cloudflare Access que Actions no pueda atravesar. La API key
 es privilegiada: no imprimir respuestas ni habilitar trazas shell que la muestren.
 En v0.30.8 hereda el rol de su usuario: una clave del owner es administrativa,
 no se limita a `compose.deploy` ni a un Compose concreto. Usar una clave dedicada
 permite revocarla por separado, no reduce sus permisos.
 
-Los cambios de workflows se publicaron en la rama `staging`. Conservarlos al
-integrar la próxima promoción desde `develop`, mediante el flujo Git acordado;
-no sobrescribir ni forzar ramas para sincronizarlas. Esta migración no propagó
-los commits a `develop` ni incorporó sus cambios funcionales pendientes.
+Al retirar QA, los workflows de `develop` y `staging` se alinean con el despliegue
+Dokploy. Un push a `develop` valida y publica imágenes, pero no despliega un
+ambiente remoto; sólo `staging` solicita este deploy. Se retira `Deploy QA` en
+ambas ramas, sin promover cambios funcionales entre ellas ni modificar el flujo
+manual de producción. Conservar esta configuración en las siguientes promociones;
+no sobrescribir ni forzar ramas para sincronizarlas.
 
 ## 5. Datos, persistencia y backups
 
@@ -342,7 +344,7 @@ los adjuntos locales, que necesitan su propio respaldo recuperable.
 - **Queda:** Actions/GHCR, Dockerfiles, Compose base, perfiles, cinco volúmenes,
   secretos actuales y backup validado. Las variables locales `.env.dev` no cambian.
 - **No borrar todavía:** scripts compartidos, overlays legacy y ejemplos Nginx:
-  producción/QA o el plan de vuelta aún los usan. Eliminar su uso en staging no
+  producción o el plan de vuelta aún los usan. Eliminar su uso en staging no
   autoriza eliminarlos para todos los ambientes.
 
 ## Apéndice A. Configuración instalada y reconstrucción
@@ -397,7 +399,7 @@ no corre como parte de un paso SSH ni requiere credenciales de aplicación.
 ## Apéndice B. Historial y receta del corte inicial
 
 El corte ya fue realizado el 2026-10-20. Se conserva esta receta para entender las
-precauciones y la vuelta, **no para ejecutarla de nuevo ni para tocar producción/QA**.
+precauciones y la vuelta, **no para ejecutarla de nuevo ni para tocar producción**.
 Otra instalación o un nuevo corte exige revisar el host y acordar otra ventana.
 
 La instalación estándar requiere libres **80, 443 y 3000**. En el stack legacy

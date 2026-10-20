@@ -9,7 +9,8 @@
 
 - [Staging con Dokploy y Traefik](docs/DOKPLOY-STAGING.md)
 - [Staging anterior con Nginx/SSH](docs/STAGING.md)
-- [QA](docs/QA.md) · [Preparación de producción](docs/PRODUCTION.md)
+- [Preparación de producción](docs/PRODUCTION.md)
+- [Aceptación institucional local](docs/institutional-access-checklist.md)
 
 <!-- Tecnologías: Infraestructura & Servicios -->
 <p align="center">

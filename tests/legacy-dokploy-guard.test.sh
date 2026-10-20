@@ -64,7 +64,7 @@ for script in bootstrap deploy-service rollback-service prepare-volumes; do
   if "$repo_dir/scripts/$script.sh" unknown ui "sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > "$test_dir/output" 2>&1; then
     exit 1
   fi
-  grep -q 'Environment must be qa, staging or production' "$test_dir/output"
+  grep -q 'Environment must be staging or production' "$test_dir/output"
 done
 
 # Simulate an older command queued on flock: the marker appears only after locking.
@@ -77,7 +77,7 @@ rm "$TEST_MARKER"
 MARK_AFTER_LOCK=true expect_managed_rejection make down ENV=staging
 test -s "$FLOCK_TRACE"
 
-for environment in qa production; do
+for environment in production; do
   for script in bootstrap deploy-service rollback-service; do
     if "$repo_dir/scripts/$script.sh" "$environment" ui "sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > "$test_dir/output" 2>&1; then
       echo "Expected legacy missing configuration failure: $script $environment" >&2
@@ -95,4 +95,4 @@ done
 BACKUP_DIR="$test_dir/backups" "$repo_dir/scripts/backup-postgres.sh" staging
 test "$(find "$test_dir/backups/staging" -name '*.dump' | wc -l)" -eq 1
 grep -q 'volume=boero-api-postgres-data-staging' "$DOCKER_TRACE"
-echo 'Legacy Dokploy guards passed; QA, production and staging backups remain available'
+echo 'Legacy Dokploy guards passed; production and staging backups remain available'

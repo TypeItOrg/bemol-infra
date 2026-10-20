@@ -123,15 +123,15 @@ def verifier_checks(out):
 
 def infra_checks(out, private):
     path = private / "infra-cases.json"
-    code, _ = run("infra-directed", ["python3", "tests/qa-config.test.py", "--evidence", str(path)], ROOT, private)
-    raw = json.loads(path.with_name("qa-config-report.json").read_text()) if path.exists() else {}
+    code, _ = run("infra-directed", ["python3", "tests/infra-config.test.py", "--evidence", str(path)], ROOT, private)
+    raw = json.loads(path.with_name("infra-config-report.json").read_text()) if path.exists() else {}
     statuses = [{"name": name, "status": status} for name, status in raw.get("tests", {}).items()]
     # Compose renders contain synthetic secrets. Preserve only command identity/exit codes.
     report = write(out / "infra-tests.json", {"runId": RUN_ID, "tests": statuses,
         "commands": [{k: v for k, v in row.items() if k in ("argv", "cwd", "exit_code")}
                      for row in raw.get("commands", [])],
         "boundary": raw.get("boundary", "No report")})
-    tree = ast.parse((ROOT / "tests/qa-config.test.py").read_text())
+    tree = ast.parse((ROOT / "tests/infra-config.test.py").read_text())
     mapping = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
                    and any(isinstance(target, ast.Name) and target.id == "CASE_TESTS" for target in node.targets))
     for case, names in mapping.items():

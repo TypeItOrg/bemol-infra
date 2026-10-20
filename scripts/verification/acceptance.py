@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = Path(__file__).with_name("requirements.json")
-EXPECTED_IDS = {"Q01", "Q02", "Q03", "Q04", "C01", "C02", "I01", "I02",
+EXPECTED_IDS = {"Q01", "Q02", "Q03", "Q04", "C01", "I01", "I02",
                 "A01", "A02", "A03", "A04", "A05", "A06", "L01", "L02", "L03", "S01", "D01", "V01"}
 
 
@@ -36,7 +36,7 @@ def audit(manifest, evidence, current, run_id=None):
     errors = []
     requirements = manifest.get("requirements", {})
     if set(requirements) != EXPECTED_IDS:
-        errors.append("El manifiesto no contiene exactamente los 20 requisitos aprobados.")
+        errors.append(f"El manifiesto no contiene exactamente los {len(EXPECTED_IDS)} requisitos vigentes.")
     if evidence.get("fingerprints") != current:
         errors.append("La evidencia no corresponde al estado actual de los repositorios.")
     if not isinstance(evidence.get("runId"), str) or not evidence["runId"].strip():
@@ -133,7 +133,7 @@ def main():
     for path in repos.values():
         if not (path / ".git").exists():
             parser.error(f"Repositorio no disponible: {path}")
-    out = ROOT / "build/verification/qa-institutional-access"
+    out = ROOT / "build/verification/institutional-access"
     out.mkdir(parents=True, exist_ok=True)
     evidence_path = args.evidence or out / "evidence.json"
     if not args.audit_only and not evidence_path.resolve().is_relative_to(ROOT / "build/verification"):
@@ -170,7 +170,7 @@ def main():
     report = {"time": datetime.now(timezone.utc).isoformat(), "boundary": "local-only",
               "complete": not errors, "errors": errors, "fingerprints": current}
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
-    lines = ["# Aceptación QA y acceso institucional", "", "Ámbito: local; no desplegado.", "",
+    lines = ["# Aceptación local de acceso institucional", "", "Ámbito: local; no desplegado.", "",
              "Resultado: " + ("VERIFICADO" if not errors else "INCOMPLETO"), ""]
     lines.extend(["| ID | Estado | Casos verificados |", "| --- | --- | --- |"])
     global_errors = [error for error in errors if not any(

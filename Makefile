@@ -4,10 +4,10 @@ export VERSION REQUEST_ID
 
 # Reject unknown environments before any recipe can mutate Docker resources.
 ifneq ($(words $(ENV)),1)
-$(error ENV must be qa, staging or production)
+$(error ENV must be staging or production)
 endif
-ifeq ($(filter qa staging production,$(ENV)),)
-$(error ENV must be qa, staging or production)
+ifeq ($(filter staging production,$(ENV)),)
+$(error ENV must be staging or production)
 endif
 ENV_FILE := .env.$(ENV)
 BASE_COMPOSE_FILE := compose.yaml
@@ -17,9 +17,9 @@ LOCK_FILE := /tmp/boero-infra-$(ENV).lock
 
 .DEFAULT_GOAL := status
 
-.PHONY: verify-qa-institutional-access
-verify-qa-institutional-access:
-	./scripts/verify-qa-institutional-access.sh
+.PHONY: verify-institutional-access
+verify-institutional-access:
+	./scripts/verify-institutional-access.sh
 
 .PHONY: prepare preflight bootstrap deploy-ui deploy-api rollback-ui rollback-api backup-db status logs logs-api logs-api-file logs-api-request down test
 
@@ -77,4 +77,4 @@ test:
 	./tests/deploy-service.test.sh
 	./tests/backup-postgres.test.sh
 	./tests/legacy-dokploy-guard.test.sh
-	python3 ./tests/qa-config.test.py
+	python3 ./tests/infra-config.test.py

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Disposable local QA/staging-simulation runtime. Never operates on existing environments.
+"""Disposable local institutional-acceptance runtime. Never operates on existing environments.
 
-start builds final prod trees, creates two namespace-labelled base+qa+override stacks,
+start builds final prod trees, creates two namespace-labelled base+generated-overlay stacks using the prod profile,
 a local TLS proxy and private synthetic fixtures. check emits only real runtime cases.
 stop removes only the captured namespace/ownership label pair; no prune or image deletion.
 """
@@ -40,7 +40,7 @@ CASES = {
                               "PostgreSQL marker rows and API-storage marker files cannot cross stacks",
                               "Stopping QA leaves staging-simulation API/UI/DB healthy and unchanged; QA restarts with data"],
     "Q02.flyway-health": ["Both actual PostgreSQL18 databases have successful Flyway history including institutional public-access migration",
-                          "API runs qa profile with actual PostgreSQL connection and validated schema columns/constraints",
+                          "API runs prod profile with actual PostgreSQL connection and validated schema columns/constraints",
                           "PostgreSQL, Redis, API, UI and capture-only Mailpit are healthy; HTTP readiness returns UP"],
     "Q03.backup-restore": ["Actual backup-postgres.sh makes private custom pg_dump and validates archive with pg_restore --list",
                             "pg_restore succeeds into a second newly created namespace-owned database, never an existing database",
@@ -223,7 +223,7 @@ def capture_owned(state, state_path):
 def compose(state, stack, *args, **kwargs):
     item = state["stacks"][stack]
     return docker("compose", "--project-name", item["project"], "--env-file", item["envFile"],
-                  "-f", ROOT / "compose.yaml", "-f", ROOT / "compose.qa.yaml", "-f", item["overrideFile"], *args, **kwargs)
+                  "-f", ROOT / "compose.yaml", "-f", item["overrideFile"], *args, **kwargs)
 
 
 def mapped_port(state, container, target):
@@ -332,6 +332,7 @@ def make_stack(state, key, domain, private):
     env_file.write_text("".join(f"{name}={value}\n" for name, value in values.items()))
     env_file.chmod(0o600)
     labels = f'      {LABEL}: "{state["namespace"]}"\n      {OWNER}: "{state["owner"]}"\n'
+    # qa/staging are historical fixture keys, not deployment targets here.
     rows = [f"name: {project}", "services:"]
     containers = {}
     for service in (*SERVICES, "api-storage-init"):
@@ -340,6 +341,21 @@ def make_stack(state, key, domain, private):
         if service in ("api", "ui", "api-storage-init"):
             image = state["images"]["api" if service == "api-storage-init" else service]["tag"]
             rows.extend([f"    image: {image}", "    pull_policy: never"])
+        if service == "api":
+            rows.extend(["    environment:", "      SPRING_PROFILES_ACTIVE: prod",
+                         "      MAIL_HOST: mailpit", "      MAIL_PORT: 1025",
+                         '      MAIL_SMTP_AUTH: "false"', '      MAIL_SMTP_STARTTLS: "false"',
+                         "    depends_on:", "      mailpit:", "        condition: service_healthy"])
+        if service == "mailpit":
+            # Capture-only mail belongs to this disposable fixture, not a deployment overlay.
+            rows.extend(["    image: axllent/mailpit:v1.31.3", '    expose: ["1025"]',
+                         "    environment:", "      MP_DATABASE: /data/mailpit.db", "      MP_MAX_MESSAGES: 1000",
+                         "    volumes:", "      - mailpit-data:/data", "    cap_drop: [ALL]",
+                         "    security_opt: [no-new-privileges:true]", "    mem_limit: 128m", "    cpus: 0.25",
+                         "    logging:", "      driver: local", "      options:",
+                         '        max-size: "10m"', '        max-file: "5"',
+                         "    healthcheck:", '      test: ["CMD", "/mailpit", "readyz"]',
+                         "      interval: 5s", "      timeout: 3s", "      retries: 5", "      start_period: 5s"])
         if service in SERVICES:
             rows.append('    restart: "no"')
         if service in ("ui", "api", "mailpit"):
@@ -558,8 +574,8 @@ def check_health(state, observations):
             statuses[service] = health
         api = owned(state, "container", item["containers"]["api"])
         values = dict(line.split("=", 1) for line in api["Config"]["Env"] if "=" in line)
-        if values.get("SPRING_PROFILES_ACTIVE") != "qa" or values.get("DB_HOST") != "postgres":
-            raise RuntimeFailure("Acceptance API does not use real QA/PostgreSQL profile")
+        if values.get("SPRING_PROFILES_ACTIVE") != "prod" or values.get("DB_HOST") != "postgres":
+            raise RuntimeFailure("Acceptance API does not use real prod/PostgreSQL profile")
         if api["Image"] != state["images"]["api"]["id"]:
             raise RuntimeFailure("API is not running the locally built final prod image")
         if owned(state, "container", item["containers"]["ui"])["Image"] != state["images"]["ui"]["id"]:
@@ -590,12 +606,12 @@ def check_backup(state, observations):
     # Snapshot is private: rendered environment contains synthetic credentials. No existing .env is used.
     rendered = compose(state, key, "config", "--format", "json").stdout
     (workspace / "compose.yaml").write_text(rendered)
-    (workspace / "compose.qa.yaml").write_text("{}\n")
-    shutil.copy2(item["envFile"], workspace / ".env.qa")
-    for file in (workspace / "compose.yaml", workspace / "compose.qa.yaml", workspace / ".env.qa"):
+    (workspace / "compose.production.yaml").write_text("{}\n")
+    shutil.copy2(item["envFile"], workspace / ".env.production")
+    for file in (workspace / "compose.yaml", workspace / "compose.production.yaml", workspace / ".env.production"):
         file.chmod(0o600)
-    run(["sh", workspace / "scripts/backup-postgres.sh", "qa"], cwd=workspace)
-    archives = sorted((private / "backups/qa").glob("*.dump"))
+    run(["sh", workspace / "scripts/backup-postgres.sh", "production"], cwd=workspace)
+    archives = sorted((private / "backups/production").glob("*.dump"))
     if not archives or not archives[-1].stat().st_size or archives[-1].stat().st_mode & 0o077:
         raise RuntimeFailure("Backup archive missing/empty or readable by others")
     archive = archives[-1]
