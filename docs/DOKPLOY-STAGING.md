@@ -270,6 +270,23 @@ ambas ramas, sin promover cambios funcionales entre ellas ni modificar el flujo
 manual de producción. Conservar esta configuración en las siguientes promociones;
 no sobrescribir ni forzar ramas para sincronizarlas.
 
+### Retiro de QA del 2026-10-20
+
+Se retiraron el workflow `Deploy QA` de API/UI en `develop` y `staging`, el perfil
+API `qa`, el overlay, la plantilla y los comandos operativos de ese ambiente.
+El checkout operativo de infraestructura también quedó actualizado. No se
+encontraron contenedores, volúmenes ni redes QA en el host, ni un environment
+`qa` en GitHub; no fue necesario borrar datos ni secrets de ese ambiente.
+
+Con autorización explícita se eliminó únicamente el registro A
+`testing.typeit.com.ar`, conservando una copia privada para recuperarlo. La
+consulta DNS devolvió NXDOMAIN; los registros general, institucional, wildcard y
+panel de staging se conservaron. Producción no se modificó.
+
+Se conservan las pruebas automatizadas y los nombres reservados `qa`/`testing`:
+sus fixtures históricos no configuran un ambiente compartido ni consumen RAM del
+servidor. El harness institucional continúa siendo una verificación local.
+
 ## 5. Datos, persistencia y backups
 
 Las imágenes y los contenedores pueden cambiar; los datos viven fuera de ellos,
