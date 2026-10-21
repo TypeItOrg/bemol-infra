@@ -1,7 +1,7 @@
 
 <!-- Banner -->
 <p align="center">
-<img width="2172" height="724" alt="ChatGPT Image Oct 19, 2026, 03_40_16 PM" src="https://github.com/user-attachments/assets/2f6f6aaa-b62d-425e-bc22-7abcdded914e" />
+<img width="2172" height="724" alt="bemol_banner_logo_pua_original" src="https://github.com/user-attachments/assets/2523e8dd-3399-4b8b-bae3-5dd62ba7b039" />
 
 </p>
 
@@ -22,9 +22,9 @@
 </p>
 
 <!-- Presentación -->
-
+<h1 align="center">Bemol</h1>
 <p align="center">
-  Plataforma que centraliza inscripciones, cursadas, calificaciones y procesos administrativos <strong>en un solo lugar</strong>.
+  Bemol es una plataforma que centraliza inscripciones, cursadas, calificaciones y procesos administrativos <strong>en un solo lugar</strong>.
   Pensada para <strong>estudiantes, docentes y personal administrativo</strong>, ofrece un espacio donde gestionar actividades,
   consultar información académica y dar seguimiento a los distintos procesos institucionales,
   mejorando la organización y facilitando la gestión cotidiana.
