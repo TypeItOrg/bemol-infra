@@ -9,7 +9,7 @@ services:
       - "127.0.0.1:${UI_HOST_PORT:-3000}:3000"
     environment:
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?AUTH_COOKIE_SECURE is required}
-      BOERO_API_URL: http://api:8080
+      BEMOL_API_URL: http://api:8080
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-}
       INSTITUTIONAL_BASE_DOMAIN: ${INSTITUTIONAL_BASE_DOMAIN:-}
       NODE_ENV: production

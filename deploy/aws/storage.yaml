@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Private application-wide S3 storage for Boero files (no antivirus or expiry)
+Description: Private application-wide S3 storage for Bemol files (no antivirus or expiry)
 Parameters:
   BucketName:
     Type: String
@@ -50,7 +50,7 @@ Resources:
   ApiDocumentsPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: Attach only to the Boero API role or dedicated IAM identity
+      Description: Attach only to the Bemol API role or dedicated IAM identity
       PolicyDocument:
         Version: '2012-10-17'
         Statement:

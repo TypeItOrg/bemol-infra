@@ -1,5 +1,5 @@
 [Unit]
-Description=Boero PostgreSQL backup for %i
+Description=Bemol PostgreSQL backup for %i
 Requires=docker.service
 After=docker.service
 

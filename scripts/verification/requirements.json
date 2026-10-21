@@ -307,13 +307,13 @@
       "ui/.github/workflows/deploy-staging.yaml"
     ],
     "I01": [
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/institutional/entities/Institution.java",
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/institutional/services/UpdateInstitutionPublicAccessUseCase.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/institutional/entities/Institution.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/institutional/services/UpdateInstitutionPublicAccessUseCase.java",
       "api/src/main/resources/db/migration/20260930221903__add_institution_public_access_and_logo.sql",
       "ui/src/features/institutions/components/institution-public-access-form.tsx"
     ],
     "I02": [
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/institutional/services/ResolveInstitutionPublicAccessUseCase.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/institutional/services/ResolveInstitutionPublicAccessUseCase.java",
       "ui/src/common/services/institutional-host/institutional-host.service.ts"
     ],
     "A01": [
@@ -325,35 +325,35 @@
       "ui/src/features/institutional-auth/components/institutional-auth-step-header.tsx"
     ],
     "A03": [
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/auth/services/InstitutionalHostContext.java",
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/auth/filters/InstitutionalHostFilter.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/auth/services/InstitutionalHostContext.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/auth/filters/InstitutionalHostFilter.java",
       "ui/src/proxy.ts"
     ],
     "A04": [
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/auth/services/TrustedWebAuthnOperations.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/auth/services/TrustedWebAuthnOperations.java",
       "ui/src/features/institutional-auth/components/institutional-passkey-step.tsx"
     ],
     "A05": [
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/auth/services/RefreshTokenUseCase.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/auth/services/RefreshTokenUseCase.java",
       "ui/src/common/services/auth-proxy/auth-proxy.service.ts"
     ],
     "A06": [
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/auth/services/FrontendAccessUrls.java",
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/auth/services/InstitutionalEmailVerificationMailService.java",
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/auth/services/InstitutionalPasswordRecoveryMailService.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/auth/services/FrontendAccessUrls.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/auth/services/InstitutionalEmailVerificationMailService.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/auth/services/InstitutionalPasswordRecoveryMailService.java",
       "ui/src/features/institutional-auth/actions/email-verification.actions.ts"
     ],
     "L01": [
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/institutional/controllers/PlatformInstitutionController.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/institutional/controllers/PlatformInstitutionController.java",
       "ui/src/features/institutions/components/institution-logo-manager.tsx"
     ],
     "L02": [
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/institutional/controllers/InstitutionalInstitutionController.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/institutional/controllers/InstitutionalInstitutionController.java",
       "ui/src/features/institutions/actions/institution-logo.actions.ts"
     ],
     "L03": [
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/institutional/services/InstitutionLogoPolicy.java",
-      "api/src/main/java/ar/edu/utn/frvm/typeit/boero_api/institutional/services/InstitutionLogoUseCase.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/institutional/services/InstitutionLogoPolicy.java",
+      "api/src/main/java/ar/edu/utn/frvm/typeit/bemol_api/institutional/services/InstitutionLogoUseCase.java",
       "ui/src/app/api/public/institutions/[institutionId]/logo/route.ts"
     ],
     "S01": [

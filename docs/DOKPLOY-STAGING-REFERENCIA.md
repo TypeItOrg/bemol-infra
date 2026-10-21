@@ -47,7 +47,7 @@ La diferencia de IP mostrada en Sesiones fue aceptada exclusivamente para stagin
 | Alta de representado nuevo (`NEW`) | Bloqueada por HTTP 400: cuerpo inválido por omisión de `ownAccessRequested` en el contrato UI/API desplegado; el caso de uso no se ejecutó |
 | Carga de un adjunto nuevo | No se inició: el alta anterior fue rechazada antes del upload; no puede darse por probada |
 | `/my-dependents` | Mostró un error temporal y un `TimeoutError` en UI; al reintentar cargó la lista, sin la persona de prueba. Causa no identificada |
-| Passkey de Boero | Validación manual diferida por el usuario: «Luego lo pruebo yo a eso»; no probada ni declarada no aplicable |
+| Passkey de Bemol | Validación manual diferida por el usuario: «Luego lo pruebo yo a eso»; no probada ni declarada no aplicable |
 
 El PDF descargado tuvo SHA-256
 `fa54bd21742f38b9d32f91dcd381c64f6cb9be757f1ac8163ceeec6ec926cf47`.
@@ -76,7 +76,7 @@ no un nuevo respaldo automático de adjuntos o de los metadatos de Dokploy.
 ## 1. Qué hace cada pieza
 
 **Idea central:** GitHub fabrica las imágenes; Dokploy las ejecuta; Traefik recibe
-las visitas. Ninguna de esas piezas reemplaza la lógica de negocio de Boero.
+las visitas. Ninguna de esas piezas reemplaza la lógica de negocio de Bemol.
 
 ```text
 push a staging → GitHub Actions valida y publica GHCR
@@ -92,17 +92,17 @@ Internet → Traefik (subdominios institucionales DNS-only) ──┘
 | Repositorios API/UI | Código, Dockerfile y desarrollo local de cada aplicación | No guardan los valores privados de staging |
 | GitHub Actions | Validar, construir y publicar las imágenes; pedir el deploy por HTTPS | No entra por SSH ni copia archivos `.env` al servidor |
 | GHCR (registro de imágenes de GitHub) | Guardar las imágenes Docker publicadas | No inicia contenedores ni almacena la base de datos |
-| Dokploy | Panel para variables privadas, despliegues, estado y logs | No compila UI/API en staging ni decide los permisos de Boero |
+| Dokploy | Panel para variables privadas, despliegues, estado y logs | No compila UI/API en staging ni decide los permisos de Bemol |
 | Docker Compose | Describir servicios, variables que recibe cada uno, redes y volúmenes | No descubre automáticamente qué variables necesita el código |
-| Traefik | Proxy, HTTPS y reglas HTTP; reemplaza Nginx/Certbot en este staging | No crea instituciones ni autentica usuarios de Boero |
+| Traefik | Proxy, HTTPS y reglas HTTP; reemplaza Nginx/Certbot en este staging | No crea instituciones ni autentica usuarios de Bemol |
 | Cloudflare | DNS y proxy de los hostnames configurados como proxied | No oculta la IP de los hostnames DNS-only |
 | UI / API | UI sirve la interfaz y actúa como intermediaria hacia API; API aplica el negocio y la autorización | API no se publica directamente en Internet |
 | PostgreSQL / Redis | PostgreSQL conserva datos de negocio; Redis soporta estado temporal y mecanismos de autenticación/revocación | Redis no sustituye la base ni es una caché para vaciar sin evaluar el impacto |
 | `boero-infra` | Configuración declarativa revisable y mantenimiento de datos | No debe contener secretos reales |
 
-Compose sigue siendo **un único stack** de Boero; no se convirtió PostgreSQL en
+Compose sigue siendo **un único stack** de Bemol; no se convirtió PostgreSQL en
 una base gestionada por el panel ni se migró el stack de aplicación a Docker Stack.
-Dokploy usa Swarm para sus propios componentes, pero eso no cambia ese modo de Boero.
+Dokploy usa Swarm para sus propios componentes, pero eso no cambia ese modo de Bemol.
 Sólo UI se conecta a la red del proxy; API habla con PostgreSQL/Redis en la red
 privada. El navegador utiliza la UI y sus rutas `/api/*`, no `http://api:8080`.
 
@@ -172,7 +172,7 @@ configuración del servidor: cada herramienta carga sus propios archivos. Consul
 En staging, Dokploy suministra los valores al ejecutar Compose. Las expresiones
 `${...}` del YAML los resuelven y cada bloque `environment` determina qué recibe
 su contenedor: **no se entrega todo el Environment a todos los servicios**. Por
-ejemplo, UI recibe `BOERO_API_URL=http://api:8080`; las credenciales DB van a API y
+ejemplo, UI recibe `BEMOL_API_URL=http://api:8080`; las credenciales DB van a API y
 PostgreSQL, no al navegador. `DB_NAME` es la base de negocio; no sustituirlo por el
 `POSTGRES_DB=postgres` que utiliza el servicio PostgreSQL de infraestructura.
 
@@ -223,7 +223,7 @@ directamente a Traefik y utiliza el certificado Let's Encrypt del origen.
 
 Traefik solicita `staging.typeit.com.ar` + `*.staging.typeit.com.ar` por DNS-01.
 El token va en un archivo privado del host, disponible al **Traefik de Dokploy**;
-no en Environment de Boero, etiquetas ni secrets de Actions. Ver
+no en Environment de Bemol, etiquetas ni secrets de Actions. Ver
 `deploy/dokploy/traefik.env.example`. Persistir y respaldar también el almacenamiento
 ACME; sus archivos y el token son privados, no material de diagnóstico para publicar.
 
@@ -242,7 +242,7 @@ orígenes por un wildcard. No hace falta modificar el código de la aplicación.
 
 La entrada habitual es el [panel de staging](https://deploy-staging.typeit.com.ar).
 La passkey registrada por el usuario protege su acceso al panel; es independiente
-del login institucional/plataforma y de las passkeys que se registren en Boero.
+del login institucional/plataforma y de las passkeys que se registren en Bemol.
 El acceso con contraseña sigue disponible: registrar una passkey no lo deshabilita.
 
 | Quiero… | Acción mínima | Qué comprobar |
@@ -264,7 +264,7 @@ actualizar una aplicación o sus variables: los datos deben conservarse.
 etiquetas nativas del hostname general durante el deploy. Para wildcard y reglas
 específicas, el YAML de
 `deploy/dokploy/` es la fuente versionada, pero el proxy lee su archivo montado en
-el host. Publicar ese YAML o redeployar el Compose de Boero no lo copia allí.
+el host. Publicar ese YAML o redeployar el Compose de Bemol no lo copia allí.
 Aplicar el cambio conservando las reglas ya instaladas y luego comprobar la
 recarga dinámica; para configuración estática, acordar la recreación del proxy.
 
@@ -386,7 +386,7 @@ los adjuntos locales, que necesitan su propio respaldo recuperable.
   No ejecutar prune ni borrar volúmenes por iniciativa.
 - La API key de Actions tiene los permisos de su usuario Dokploy. Una clave
   dedicada del owner sigue siendo administrativa; no presentarla como limitada
-  al deploy de Boero. Su protección y eventual revocación son importantes.
+  al deploy de Bemol. Su protección y eventual revocación son importantes.
 
 ## 7. Único mecanismo de operación
 

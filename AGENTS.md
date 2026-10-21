@@ -1,4 +1,4 @@
-# Boero infrastructure
+# Bemol infrastructure
 
 This repository owns Dokploy Compose configuration, Traefik rules, environment templates, PostgreSQL backups and local acceptance tooling. Application Dockerfiles, local development and image publication belong to their respective repositories.
 

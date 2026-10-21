@@ -220,7 +220,7 @@ Ejemplo conceptual: una institución activa con `publicSubdomain=escuela` usa
 2. El wildcard DNS ya dirige ese nombre al servidor.
 3. El certificado wildcard ya cubre HTTPS para ese nombre.
 4. El router wildcard de Traefik lo envía a la misma UI.
-5. Boero resuelve `publicSubdomain` y aplica el contexto de la institución.
+5. Bemol resuelve `publicSubdomain` y aplica el contexto de la institución.
 
 **No hay una llamada a Cloudflare ni un certificado por cada institución.** El
 token DNS del paso 7 valida certificados, no crea un registro A por institución.
@@ -361,3 +361,9 @@ El archivo dinámico se aplicó desde el panel y su configuración queda version
 en este repositorio. Publicar infra en Git no sincroniza ese archivo automáticamente
 ni actualiza `/opt/boero-infra`: el checkout operativo y los recursos retenidos
 del host no se modificaron con esta limpieza.
+
+## Nombre de la aplicación
+
+La aplicación se llama **Bemol**. Los identificadores operativos anteriores se
+conservan cuando son necesarios para acceder a recursos existentes. Consultar
+[la transición de nombre](RENOMBRE-BEMOL.md).

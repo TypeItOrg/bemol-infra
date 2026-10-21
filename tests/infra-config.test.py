@@ -250,7 +250,7 @@ class InfraConfigTests(unittest.TestCase):
         self.assertEqual(values["spring.sql.init.mode"], "never")
         self.assertEqual(values["springdoc.api-docs.enabled"], "false")
         self.assertEqual(values["springdoc.swagger-ui.enabled"], "false")
-        guard = API / "src/main/java/ar/edu/utn/frvm/typeit/boero_api/auth/config/WebAuthnDeploymentGuard.java"
+        guard = API / "src/main/java/ar/edu/utn/frvm/typeit/bemol_api/auth/config/WebAuthnDeploymentGuard.java"
         exemptions = re.findall(r'profile.equalsIgnoreCase\("([^"]+)"\)', guard.read_text())
         self.assertEqual(set(exemptions), {"dev", "test"})
 
