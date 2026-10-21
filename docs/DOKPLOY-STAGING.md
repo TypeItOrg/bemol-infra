@@ -6,15 +6,16 @@ volver a migrar: **staging ya existe**. Primero leer; ejecutar cambios sólo con
 autorización y la ventana que correspondan. No hay otro entorno compartido ni
 producción configurada en este repositorio.
 
-**Objetivo preparado, no aplicado:** los identificadores técnicos de esta guía
-son los nuevos `bemol-*`. El entorno real conserva su configuración previa hasta
-completar [el corte coordinado](RENOMBRE-BEMOL.md). No desplegar estos Compose
-sobre datos existentes sin backups verificados y migración: los volúmenes y red
-son externos; una DB ausente detiene PostgreSQL en lugar de crearla vacía.
+**Renombre aplicado en staging el 2026-10-21:** los identificadores técnicos activos
+son `bemol-*`. Se recrearon únicamente los datasets de prueba autorizados y se
+regeneraron con seeders; no repetir ese descarte sobre datos que deban conservarse.
+El [registro del corte](RENOMBRE-BEMOL.md) distingue controles vivos, límites y las
+vías de recreación descartable o migración persistente. Los volúmenes y red son
+externos; una DB ausente detiene PostgreSQL en lugar de crearla vacía.
 
-La migración operativa anterior se validó el 2026-10-20; la aceptación funcional completa
-sigue parcial. Los resultados, límites y datos técnicos se conservan en la
-[referencia de staging](DOKPLOY-STAGING-REFERENCIA.md). No confundir ese historial
+La migración operativa previa se validó el 2026-10-20. Sus resultados y límites se
+conservan como historial en la [referencia de staging](DOKPLOY-STAGING-REFERENCIA.md).
+No confundir ese historial
 con una comprobación del servidor en cada edición de este documento.
 
 ## Antes de empezar: las tres responsabilidades
@@ -36,7 +37,7 @@ Cloudflare administra DNS y, donde se habilita su proxy, queda delante de Traefi
 1. Entrar al [panel](https://deploy-staging.typeit.com.ar).
 2. En **Projects**, abrir el proyecto existente **Bemol**.
 3. Seleccionar el environment **staging**; no el environment por defecto del proyecto.
-4. Abrir su servicio Compose **Staging**. Contiene UI, API, PostgreSQL y Redis;
+4. Abrir su servicio Compose **Bemol staging**. Contiene UI, API, PostgreSQL y Redis;
    no hay un Compose diferente por aplicación.
 
 No crear un proyecto, environment ni servicio duplicado para seguir esta guía.
@@ -46,15 +47,15 @@ su `composeId`**. No lo genera GitHub, el YAML ni quien elige el nombre.
 
 | Dato | Qué significa | ¿Lo elegimos? |
 |---|---|---|
-| Name: `Staging` | Nombre visible del servicio en el proyecto Bemol | Sí; lápiz junto al título → Name → Update |
+| Name: `Bemol staging` | Nombre visible del servicio en el proyecto Bemol | Sí; lápiz junto al título → Name → Update |
 | `composeId` | Identificador interno que usa la API | No; Dokploy lo asigna al crear el recurso |
-| `appName` del recurso | Nombre técnico del proyecto Compose | Inventariar; migrar al prefijo `bemol-` durante el corte aprobado, no inventar el sufijo |
+| `bemol-staging-8u7h7g` | `appName` técnico del Compose actual | Inmutable mediante update en v0.30.8; el cambio se hizo creando un recurso soportado nuevo |
 
 El nombre visible se puede cambiar sin deploy; **no sustituye el `composeId`** ni
 exige cambiar los secrets de Actions. El proyecto padre se llama Bemol; el environment es staging.
-El renombre técnico requiere el corte coordinado de
-[RENOMBRE-BEMOL.md](RENOMBRE-BEMOL.md); no se realiza desde esta guía ni creando
-recursos vacíos.
+El Compose anterior fue retirado después del corte documentado en
+[RENOMBRE-BEMOL.md](RENOMBRE-BEMOL.md). No intentar cambiar `appName` con SQL ni
+crear otro servicio duplicado para seguir esta guía.
 
 ## Paso 2. Entender qué repositorio lee Dokploy
 
@@ -78,7 +79,7 @@ revisar la receta, pero no muestra una prueba de salud ni garantiza qué se ejec
 
 ## Paso 3. Ubicar las variables privadas
 
-1. Abrir **Environment** del Compose **Staging**.
+1. Abrir **Environment** del Compose **Bemol staging**.
 2. Comparar los nombres con [.env.dokploy.staging.example](../.env.dokploy.staging.example).
 3. Conservar claves de autenticación, correo y WebAuthn existentes. Cambiar nombres
    DB/rol y destinos de storage sólo después de copiar/migrar y verificar sus datos;
@@ -133,7 +134,7 @@ aplicación hay dos piezas deliberadamente distintas:
 
 ### Reconstruir la entrada de Domains (no duplicarla si ya existe)
 
-En el servicio **Staging** del proyecto **Bemol**, abrir **Domains → Add Domain**:
+En el servicio **Bemol staging** del proyecto **Bemol**, abrir **Domains → Add Domain**:
 
 | Campo | Valor |
 |---|---|
@@ -243,7 +244,7 @@ mantiene en `staging.typeit.com.ar`; no cambiarlo ni poner un wildcard como orig
 El ID fue generado por **Dokploy al crear el servicio**, no al renombrarlo. Para
 obtenerlo desde esta versión del panel:
 
-1. Abrir el Compose **Staging**, no el proyecto ni una pestaña de contenedor.
+1. Abrir el Compose **Bemol staging**, no el proyecto ni una pestaña de contenedor.
 2. Mirar la URL del navegador. Tiene esta estructura:
    `/dashboard/project/<projectId>/environment/<environmentId>/services/compose/<composeId>`.
 3. Copiar únicamente el segmento que sigue a `/services/compose/`: ése es el ID.
@@ -315,7 +316,8 @@ migraciones Flyway. No restaurar un backup encima de datos nuevos por iniciativa
 - **Rebuild:** no es necesario en el flujo normal de imágenes fabricadas en Actions.
 - **Backups / Volume Backups:** que existan pestañas no significa que haya una
   política configurada allí. El backup diario PostgreSQL sigue siendo independiente:
-  systemd ejecuta `make backup-db ENV=staging` en `/opt/bemol-infra`.
+  systemd ejecuta `make backup-db ENV=staging` en `/opt/bemol-infra`, mediante
+  `bemol-backup@staging.timer`; el destino por defecto es `/var/backups/bemol/staging`.
 
 El backup valida el dump antes de rotar y conserva la selección del volumen de
 staging. No respalda adjuntos ni sustituye una copia fuera del host. Consultar
@@ -329,9 +331,9 @@ Deployments/Containers/Logs. No publicar logs crudos con valores privados.
 ## Nombres visibles y nombres técnicos
 
 El proyecto se llama **Bemol**, su environment **staging** y el servicio Compose
-**Staging**. El código objetivo usa repositorios/imágenes/recursos `bemol-*`.
-Esto no acredita su existencia remota ni modifica el `composeId`: inventariar el
-recurso real y acordar su renombre técnico antes de habilitar el siguiente deploy.
+**Bemol staging**. El recurso actual usa repositorios/imágenes/recursos `bemol-*`.
+Su Compose ID es nuevo y está configurado en los dos repositorios de aplicaciones;
+no confundirlo con el `appName` ni reutilizar el ID del servicio retirado.
 
 ## Para profundizar
 

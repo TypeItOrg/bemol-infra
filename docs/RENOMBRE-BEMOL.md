@@ -1,10 +1,51 @@
-# Renombre integral a Bemol: corte operativo pendiente
+# Renombre integral a Bemol
 
 El producto se llama **Bemol**, incluidos sus identificadores técnicos. Los nombres
-anteriores no son una compatibilidad permanente. Este cambio prepara código,
-configuración y documentación; **no renombra recursos remotos, no despliega, no
-copia datos y no modifica credenciales privadas**. El usuario confirmó que ya
-renombró los repositorios remotos a `bemol-api`, `bemol-ui` y `bemol-infra`.
+anteriores no son una compatibilidad permanente. Las plantillas no ejecutan cambios
+por sí mismas; las operaciones autorizadas realmente aplicadas se registran abajo.
+El usuario renombró los repositorios remotos a `bemol-api`, `bemol-ui` y `bemol-infra`.
+
+## Estado aplicado: staging, 2026-10-21
+
+- Destino verificado: host `cristinet`, proyecto Bemol, environment staging y
+  servicio **Bemol staging**, `appName` `bemol-staging-8u7h7g`.
+- [Dokploy v0.30.8](https://github.com/Dokploy/dokploy/blob/v0.30.8/packages/server/src/services/compose.ts#L212-L226)
+  descarta `appName` en su handler de actualización. Se creó un
+  Compose nuevo mediante la UI soportada, no mediante SQL de renombre; ambos
+  secrets `DOKPLOY_STAGING_COMPOSE_ID` apuntan a esa nueva identidad. El recurso
+  anterior, sus dominios/mounts y su directorio administrado fueron retirados.
+- Se recrearon los cinco volúmenes y la red Bemol; la base/rol `bemol` se
+  aprovisionó explícitamente antes de iniciar el wrapper con guard. Los datasets
+  de prueba se descartaron por autorización y se regeneraron con seeders. No se
+  migraron datos antiguos ni se hicieron backups de esos datasets.
+- Se retiraron nueve contenedores detenidos de los dos stacks anteriores, sus
+  cinco volúmenes y la red antigua, con guardas de identidad/consumidores; no hubo
+  force ni prune. Dokploy, su PostgreSQL y Traefik siguieron funcionando sin
+  recrearlos ni borrar sus volúmenes.
+- Se aplicaron el archivo dinámico `bemol-staging.yml`, alias y middlewares Bemol,
+  conservando el dominio general nativo y wildcard institucional. DB password,
+  JWT, claves de refresh y contraseña SMTP se preservaron, sin publicar valores.
+- Mediante sudo autorizado se movieron el checkout a `/opt/bemol-infra` y los
+  respaldos existentes a `/var/backups/bemol`; se renombraron unidades/timer,
+  preservando configuración y marca temporal. El timer Bemol quedó enabled/active,
+  sin invocar el backup oneshot ni crear otra copia de datos.
+- API, UI, PostgreSQL y Redis quedaron healthy; el inicializador de storage salió
+  con código cero. Se verificaron los manifests SHA del corte. El flujo cotidiano
+  conserva `UI_VERSION=staging` y `API_VERSION=staging`; guardar variables no cambia
+  contenedores vivos hasta su siguiente deploy.
+- HTTPS general, institucional y panel devolvieron 200; HTTP general redirigió 301
+  a HTTPS; rutas privadas solicitadas públicamente y acceso directo al origen devolvieron
+  403. Son controles operativos, no una batería funcional completa ni una prueba
+  de restauración de backups o passkeys.
+- Se retiraron cuatro referencias de imágenes antiguas comprobadas de staging.
+  El caché histórico SHA sin procedencia inequívoca y el registro GHCR se
+  conservaron: no son referencias activas ni se asumieron descartables imágenes
+  potencialmente productivas. Git, Flyway y respaldos históricos no se reescriben.
+
+La operación no autoriza ni acredita cambios en producción. S3 no se utilizaba en
+este staging (`STORAGE_PROVIDER=local`); no se copiaron objetos ni se operó AWS.
+Las secuencias siguientes son instrucciones para futuras recreaciones/migraciones,
+no tareas para repetir sobre el entorno ya recreado.
 
 ## Alcance y excepciones
 
@@ -17,7 +58,7 @@ renombró los repositorios remotos a `bemol-api`, `bemol-ui` y `bemol-infra`.
   alias `bemol-ui-staging`, routers/servicios/middlewares Traefik `bemol-*`.
 - Backups: `bemol-backup@staging.timer`/`.service`, lock
   `/tmp/bemol-infra-staging.lock`, destino `/var/backups/bemol/staging`, dumps
-  `bemol-staging-<UTC>.dump`; checkout operativo objetivo `/opt/bemol-infra`.
+  `bemol-staging-<UTC>.dump`; checkout operativo `/opt/bemol-infra`.
 - Se preservan **Felipe Boero**, `Conservatorio Boero`, `cboero`, apellidos y
   escudo institucional: son la institución/personas, no el producto.
 - No se reescriben migraciones Flyway aplicadas, registros de negocio,
@@ -180,9 +221,10 @@ perderían escrituras posteriores al corte.
 Este repositorio no ejecuta automáticamente las secuencias anteriores, tests,
 backups ni despliegues. Las operaciones locales autorizadas se informan por
 separado y no son evidencia de recreación remota ni de autorización productiva.
-La sintaxis y el render de Compose no prueban la migración ni la existencia de
-imágenes/destinos remotos. El cambio no está listo para un deploy automático sobre
-el entorno previo sin completar los pasos operativos anteriores.
+La sintaxis y el render de Compose por sí solos no prueban una migración ni la
+existencia de destinos remotos. El registro de staging anterior distingue las
+comprobaciones vivas realizadas; otros entornos requieren inventario y autorización
+propios antes de aplicar estas configuraciones.
 
 El harness sólo admite namespaces/labels/archivos de estado `bemol-acceptance-*`.
 Se retiró la compatibilidad anterior tras verificar que no había estados ni
