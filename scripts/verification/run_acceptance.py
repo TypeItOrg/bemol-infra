@@ -139,7 +139,6 @@ def infra_checks(out, private):
         if code:
             tests.append({"name": "infra-directed process", "status": "failed"})
         proof(case, "configuration", tests, report)
-    run("legacy-deploy-tests", ["sh", "tests/deploy-service.test.sh"], ROOT, private)
 
 
 def api_checks(out, private):

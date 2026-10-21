@@ -6,8 +6,8 @@ solo despliegues remotos, cambios de producción, commits ni pushes.
 
 ## Decisiones
 
-- Sólo quedan los ambientes compartidos `staging` y `production`; desarrollo local
-  sigue perteneciendo a los repositorios de aplicación. No se configura un ambiente
+- El único ambiente compartido configurado es `staging`, operado con Dokploy;
+  desarrollo local sigue perteneciendo a los repositorios de aplicación. No se configura un ambiente
   QA/testing ni un despliegue manual adicional.
 - `publicSubdomain` opcional e independiente de `slug`, administrado por plataforma.
 - Logos PNG/JPEG, máximo 2 MiB, administrados por plataforma o por una institución
@@ -27,9 +27,9 @@ fallida, sin ejecutar o perteneciente a otro estado del código impide el cierre
 | --- | --- |
 | Q01 | Las configuraciones persistentes y los stacks descartables de aceptación conservan aislamiento de redes, volúmenes y secretos. |
 | Q02 | El harness local usa perfil `prod`, PostgreSQL/Flyway y healthchecks; no usa H2 ni create-drop. |
-| Q03 | Se conservan los contratos genéricos de operaciones legacy y backup/restore sobre datos descartables. |
-| Q04 | Ambiente/SHA inválidos, preflight fallido y despliegue no saludable no alteran otros ambientes. |
-| C01 | Develop publica sólo tras controles; PRs no publican; staging/main conservan sus flujos. |
+| Q03 | El backup conserva selección segura, validación del dump, permisos, retención y restauración sobre datos descartables. |
+| Q04 | Se rechazan ambientes inválidos y comandos retirados; credenciales ausentes o error HTTPS fallan la solicitud de deploy. |
+| C01 | Develop/main y PRs ejecutan CI sin publicar; sólo staging publica y solicita deploy tras CI del mismo commit. |
 | I01 | Nombre público opcional, independiente, DNS-safe y reservado con unicidad PostgreSQL. |
 | I02 | Resolver público mínimo; nombres desconocidos/inactivos son 404, indisponibilidad es 503. |
 | A01 | Acceso general conserva selector y flujos; autenticación de plataforma se mantiene. |
@@ -63,9 +63,9 @@ cada requisito con su código, prueba y evidencia. Un bloqueo no cuenta como éx
 ## Separación respecto a los ambientes compartidos
 
 Este harness no configura DNS, secretos de Actions ni despliegues de ambientes.
-Staging se opera mediante [Dokploy](DOKPLOY-STAGING.md) y producción conserva su
-[preparación independiente](PRODUCTION.md). Cambiar configuración compartida,
-datos persistentes o activar producción requiere autorización separada.
+Staging se opera únicamente mediante [Dokploy](DOKPLOY-STAGING.md). Cambiar
+configuración compartida, datos persistentes o incorporar otro ambiente requiere
+autorización separada.
 
 ## Qué ejecuta el verificador
 
@@ -74,7 +74,7 @@ Compose compatible con `!override` (2.24.4 o posterior), OpenSSL, Python 3,
 Java 21/Gradle del proyecto y pnpm/dependencias instaladas en la UI.
 
 1. Ejecuta las pruebas negativas del propio verificador y las pruebas dirigidas
-   de configuración/orquestación/workflows. Estas últimas simulan Docker/SSH;
+   de configuración/backups/workflows. Estas últimas simulan Docker y peticiones HTTPS;
    **no** prueban un despliegue remoto.
 2. Reejecuta los filtros de API registrados en `scripts/verification/api-tests.json`
    con PostgreSQL/Flyway/Redis reales para las pruebas de integración y los
@@ -124,13 +124,17 @@ se rechaza. El comando no publica imágenes ni se conecta por SSH.
 
 ## Disponibilidad actual y cambio de alcance
 
-El retiro del ambiente QA eliminó su overlay, plantilla, perfil y despliegue manual;
-no eliminó las pruebas institucionales ni el verificador de evidencia. Las pruebas
-infra usan ahora un workspace `production` sintético con Docker simulado. Se retiró
-sólo el requisito C02 de despliegue manual QA y se mantuvieron los contratos genéricos.
-El runtime local genera su overlay y Mailpit sin depender de `compose.qa.yaml` ni
-del perfil eliminado. Su backup usa un workspace privado `production`, no el
-selector de staging que apunta a un volumen histórico compartido.
+El retiro de ambientes y del deploy anterior no elimina las pruebas institucionales
+ni el verificador de evidencia. Ya no se prueban operaciones SSH ni overlays de
+producción. Q03 comprueba seguridad del backup; Q04 rechaza comandos/ambientes
+retirados y comprueba el fallo de solicitudes HTTPS a Dokploy, no un rollback de
+shell que ya no existe. Cambiar estos contratos invalida evidencia anterior.
+
+El runtime local genera sus overlays y Mailpit sin depender de archivos de ambiente.
+Para backup, comprueba ownership y pasa explícitamente su volumen PostgreSQL
+sintético al helper, sin utilizar el volumen predeterminado de staging. El Nginx
+que genera el harness es sólo un proxy TLS descartable para las pruebas del
+contrato de aplicación; no configura ni verifica el Traefik operativo.
 
 Conservar el driver no prueba que toda la batería sea ejecutable: en los checkouts
 actuales de UI no está presente la batería Playwright ni el script `test:acceptance`

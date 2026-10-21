@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 INFRA = Path(__file__).resolve().parents[1]
 API = Path(os.environ.get("API_REPO", INFRA.parent / "boero-api")).resolve()
@@ -27,9 +28,9 @@ OTHER_SHA = "c" * 40
 CASE_TESTS = {
     "Q01.isolated-compose": ["test_compose_isolation", "test_dokploy_staging_compose", "test_local_acceptance_compose"],
     "Q02.persistent-readiness": ["test_persistent_profile", "test_postgres_final_readiness"],
-    "Q03.legacy-operations": ["test_legacy_operations", "test_bootstrap_order"],
-    "Q04.invalid-input": ["test_invalid_inputs", "test_preflight_preservation"],
-    "Q04.failed-deploy-rollback": ["test_unhealthy_rollback", "test_api_initialization_failure"],
+    "Q03.backup-safety": ["test_backup_safety", "test_acceptance_backup_isolation"],
+    "Q04.invalid-input": ["test_invalid_inputs", "test_removed_deployment_commands"],
+    "Q04.failed-deploy-request": ["test_dokploy_staging_workflows"],
     "C01.publication-gates": ["test_publication_gates"],
     "C01.existing-flows": ["test_existing_flows", "test_dokploy_staging_workflows"],
     "D01.configuration-runbook": ["test_documented_contract"],
@@ -119,77 +120,32 @@ class InfraConfigTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.work = Path(self.temporary.name)
 
-    def render(self, environment, values):
-        env_file = self.work / f"synthetic-{environment}.env"
+    def render(self, values):
+        env_file = self.work / "synthetic-staging.env"
         write_env(env_file, values)
-        result = command(["docker", "compose", "--profile", "maintenance", "--env-file", str(env_file),
-                          "-f", str(INFRA / "compose.yaml"), "-f", str(INFRA / f"compose.{environment}.yaml"),
+        result = command(["docker", "compose", "--env-file", str(env_file),
+                          "-f", str(INFRA / "compose.dokploy.staging.yaml"),
                           "config", "--format", "json"], INFRA, cli_environment())
         return json.loads(result.stdout)
 
-    def mocked_workspace(self):
-        for name in ("Makefile", "compose.yaml", "compose.staging.yaml", "compose.production.yaml"):
-            shutil.copy2(INFRA / name, self.work / name)
-        shutil.copytree(INFRA / "scripts", self.work / "scripts")
-        for environment in ("staging", "production"):
-            values = synthetic_env()
-            values["BACKUP_DIR"] = str(self.work / "backups")
-            values["BACKUP_RETENTION_DAYS"] = "7"
-            write_env(self.work / f".env.{environment}", values)
-        bindir = self.work / "bin"
-        bindir.mkdir()
-        docker = bindir / "docker"
-        docker.write_text('''#!/usr/bin/env python3
-import json, os, pathlib, sys
-args=sys.argv[1:]
-with open(os.environ['DOCKER_TRACE'], 'a') as stream:
-    stream.write(json.dumps(args)+'\\n')
-if args[:2] == ['volume', 'create']:
-    print(args[2]); sys.exit(0)
-if args[0] != 'compose': sys.exit(9)
-if os.environ.get('FAIL_PREFLIGHT') == 'true' and args[-2:] == ['config','--quiet']:
-    sys.exit(2)
-envfile=pathlib.Path(args[args.index('--env-file')+1])
-values=dict(line.split('=',1) for line in envfile.read_text().splitlines() if '=' in line)
-if 'up' in args and os.environ.get('FAIL_NEW_VERSION') == 'true':
-    key='API_VERSION' if args[-1] == 'api' else 'UI_VERSION'
-    if values[key] == 'sha-'+('b'*40): sys.exit(3)
-if 'api-storage-init' in args and os.environ.get('FAIL_STORAGE_INIT') == 'true':
-    if values['API_VERSION'] == 'sha-'+('b'*40): sys.exit(4)
-if 'exec' in args and 'postgres' in args:
-    if any('pg_dump' in arg for arg in args): print('synthetic-custom-dump')
-    if 'pg_restore' in args:
-        if not sys.stdin.read().startswith('synthetic-custom-dump'): sys.exit(5)
-''')
-        docker.chmod(0o755)
-        self.trace = self.work / "docker.jsonl"
-        self.env = cli_environment() | {"PATH": str(bindir) + ":" + os.environ["PATH"], "DOCKER_TRACE": str(self.trace)}
-
-    def trace_commands(self):
-        return [json.loads(line) for line in self.trace.read_text().splitlines()] if self.trace.exists() else []
-
-    def make(self, target, extra=(), env=None, check=True):
-        return command(["make", target, "ENV=production", *extra], self.work, self.env | (env or {}), check)
-
-    def preserved(self):
-        return {name: (self.work / name).read_bytes() for name in (".env.staging",)}
-
-    def assert_preserved(self, baseline):
-        for name, value in baseline.items():
-            self.assertEqual((self.work / name).read_bytes(), value)
-        self.assertFalse((self.work / ".deploy/staging").exists())
-
     def test_compose_isolation(self):
-        configs = {environment: self.render(environment, synthetic_env()) for environment in ("staging", "production")}
-        staging, production = configs["staging"], configs["production"]
-        self.assertTrue({v["name"] for v in staging["volumes"].values()}.isdisjoint(
-            v["name"] for v in production["volumes"].values()))
-        self.assertNotEqual(staging["networks"]["default"]["name"], production["networks"]["default"]["name"])
-        for configured in configs.values():
+        spec = importlib.util.spec_from_file_location("acceptance_runtime", INFRA / "scripts/verification/runtime.py")
+        runtime = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runtime)
+        state = {"namespace": "boero-acceptance-synthetic", "owner": "synthetic-owner", "tlsPort": 8443,
+                 "images": {"api": {"tag": "synthetic-api:local"}, "ui": {"tag": "synthetic-ui:local"}}, "stacks": {}}
+        configs = []
+        for key in ("qa", "staging"):
+            runtime.make_stack(state, key, f"{key}.example.invalid", self.work)
+            stack = state["stacks"][key]
+            result = command(["docker", "compose", "--profile", "maintenance", "--env-file", stack["envFile"],
+                              "-f", str(INFRA / "compose.yaml"), "-f", stack["overrideFile"],
+                              "config", "--format", "json"], INFRA, cli_environment())
+            configured = json.loads(result.stdout)
+            configs.append(configured)
             services = configured["services"]
             for service in ("postgres", "redis"):
                 self.assertNotIn("ports", services[service])
-            self.assertEqual(services["ui"]["environment"]["FRONTEND_PUBLIC_URL"], "")
             self.assertEqual(services["postgres"]["image"], "postgres:18-alpine")
             self.assertIn("readiness", " ".join(services["api"]["healthcheck"]["test"]))
             self.assertIn("pg_isready", " ".join(services["postgres"]["healthcheck"]["test"]))
@@ -197,6 +153,15 @@ if 'exec' in args and 'postgres' in args:
             self.assertEqual(helper["image"], services["api"]["image"])
             self.assertEqual(helper["network_mode"], "none")
             self.assertEqual([v["source"] for v in helper["volumes"]], ["api-storage"])
+        left, right = configs
+        self.assertTrue({v["name"] for v in left["volumes"].values()}.isdisjoint(
+            v["name"] for v in right["volumes"].values()))
+        self.assertNotEqual(left["networks"]["default"]["name"], right["networks"]["default"]["name"])
+        live = self.render(synthetic_env())
+        for fixture in configs:
+            self.assertTrue({v["name"] for v in fixture["volumes"].values()}.isdisjoint(
+                v["name"] for v in live["volumes"].values()))
+            self.assertNotEqual(fixture["networks"]["default"]["name"], live["networks"]["default"]["name"])
 
     def test_dokploy_staging_compose(self):
         compose_file = INFRA / "compose.dokploy.staging.yaml"
@@ -335,101 +300,48 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
         self.assertTrue(all(probe[probe.index("-h")+1] == "127.0.0.1" for probe in probes))
         self.assertTrue((self.work / "created").exists())
 
-    def test_legacy_operations(self):
-        self.mocked_workspace()
-        baseline = self.preserved()
-        for target in ("prepare", "preflight", "status", "logs", "logs-api", "logs-api-file", "down"):
-            self.make(target)
-        self.make("logs-api-request", ["REQUEST_ID=synthetic-id"])
-        self.make("deploy-ui", ["VERSION=sha-" + NEW_SHA])
-        self.assertIn("UI_VERSION=sha-" + NEW_SHA, (self.work / ".env.production").read_text())
-        self.make("rollback-ui")
-        self.assertIn("UI_VERSION=sha-" + OLD_SHA, (self.work / ".env.production").read_text())
-        self.make("deploy-api", ["VERSION=sha-" + NEW_SHA])
-        self.make("rollback-api")
-        self.assertIn("API_VERSION=sha-" + OTHER_SHA, (self.work / ".env.production").read_text())
-        self.make("backup-db")
-        archives = list((self.work / "backups/production").glob("*.dump"))
-        self.assertEqual(len(archives), 1)
-        self.assertEqual(archives[0].stat().st_mode & 0o777, 0o600)
-        self.assertFalse(list((self.work / "backups/production").glob("*.tmp")))
-        commands = self.trace_commands()
-        volumes = {cmd[2] for cmd in commands if cmd[:2] == ["volume", "create"]}
-        self.assertEqual(volumes, {f"boero-{name}-prod" for name in
-                                  ("ui-next-cache", "api-postgres-data", "api-redis-data", "api-logs", "api-enrollment-storage")})
-        for args in commands:
-            if args[0] == "compose":
-                self.assertIn("compose.production.yaml", args)
-                self.assertNotIn("compose.staging.yaml", args)
-        self.assertTrue(any("--remove-orphans" in args for args in commands))
-        self.assertFalse(any("--volumes" in args for args in commands))
-        self.assert_preserved(baseline)
-
-    def test_bootstrap_order(self):
-        self.mocked_workspace()
-        self.make("bootstrap")
-        commands = self.trace_commands()
-        self.assertEqual(commands[0][-2:], ["config", "--quiet"])
-        self.assertEqual(commands[1][:2], ["volume", "create"])
-        pull = next(i for i, cmd in enumerate(commands) if cmd[-1:] == ["pull"])
-        initialize = next(i for i, cmd in enumerate(commands) if "api-storage-init" in cmd)
-        up = next(i for i, cmd in enumerate(commands) if "up" in cmd)
-        self.assertLess(pull, initialize)
-        self.assertLess(initialize, up)
-        self.assertIn("--wait", commands[up])
-
     def test_invalid_inputs(self):
-        self.mocked_workspace()
-        baseline = self.preserved() | {".env.production": (self.work / ".env.production").read_bytes()}
-        targets = ("prepare", "preflight", "bootstrap", "deploy-api", "deploy-ui", "rollback-api", "rollback-ui", "backup-db", "status", "logs", "down")
-        for environment in ("bad", "../staging", "%", "staging production", "qa"):
-            for target in targets:
-                result = command(["make", target, "ENV=" + environment, "VERSION=sha-" + NEW_SHA], self.work, self.env, False)
-                self.assertNotEqual(result.returncode, 0)
-        for script in ("prepare-volumes.sh", "bootstrap.sh", "deploy-service.sh", "rollback-service.sh", "backup-postgres.sh"):
-            self.assertNotEqual(command(["./scripts/" + script, "unknown", "api", "sha-" + NEW_SHA], self.work, self.env, False).returncode, 0)
-        for version in ("", "develop", "sha-" + "B" * 40, "sha-" + "z" * 40,
-                        "sha-abcd;touch injected", "sha-$$(touch injected)"):
-            self.assertNotEqual(self.make("deploy-api", ["VERSION=" + version], check=False).returncode, 0)
-        self.assertEqual(self.trace_commands(), [])
-        self.assertFalse((self.work / "injected").exists())
-        self.assertFalse((self.work / ".deploy").exists())
-        self.assert_preserved(baseline)
+        shutil.copy2(INFRA / "Makefile", self.work / "Makefile")
+        for environment in ("production", "bad", "../staging", "%", "staging production", "qa", ""):
+            result = command(["make", "--no-print-directory", "help", "ENV=" + environment],
+                             self.work, cli_environment(), False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ENV must be staging", result.stderr)
 
-    def test_preflight_preservation(self):
-        self.mocked_workspace()
-        baseline = self.preserved() | {".env.production": (self.work / ".env.production").read_bytes()}
-        for target in ("bootstrap", "deploy-api", "deploy-ui"):
-            self.assertNotEqual(self.make(target, ["VERSION=sha-" + NEW_SHA], {"FAIL_PREFLIGHT": "true"}, False).returncode, 0)
-        self.assertTrue(all(args[-2:] == ["config", "--quiet"] for args in self.trace_commands()))
-        self.assertFalse((self.work / ".deploy").exists())
-        self.assert_preserved(baseline)
+    def test_removed_deployment_commands(self):
+        shutil.copy2(INFRA / "Makefile", self.work / "Makefile")
+        for target in ("prepare", "preflight", "bootstrap", "deploy-api", "deploy-ui",
+                       "rollback-api", "rollback-ui", "status", "logs", "logs-api",
+                       "logs-api-file", "logs-api-request", "down"):
+            result = command(["make", "-n", target, "ENV=staging"], self.work, cli_environment(), False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No rule to make target", result.stderr)
+        backup = command(["make", "-n", "backup-db", "ENV=staging"], INFRA, cli_environment())
+        self.assertIn("flock /tmp/boero-infra-staging.lock ./scripts/backup-postgres.sh staging", backup.stdout)
 
-    def test_unhealthy_rollback(self):
-        self.mocked_workspace()
-        baseline = self.preserved()
-        for service, previous in (("ui", OLD_SHA), ("api", OTHER_SHA)):
-            with self.subTest(service=service):
-                before = (self.work / ".env.production").read_bytes()
-                start = len(self.trace_commands())
-                self.assertNotEqual(self.make("deploy-" + service, ["VERSION=sha-" + NEW_SHA],
-                                              {"FAIL_NEW_VERSION": "true"}, False).returncode, 0)
-                self.assertEqual((self.work / ".env.production").read_bytes(), before)
-                up_commands = [args for args in self.trace_commands()[start:] if "up" in args]
-                self.assertEqual(len(up_commands), 2)
-                self.assertIn("--wait", up_commands[0])
-                self.assertEqual((self.work / f".deploy/production/{service}.previous").read_text().strip(), "sha-" + previous)
-                self.assert_preserved(baseline)
+    def test_backup_safety(self):
+        command(["sh", str(INFRA / "tests/backup-postgres.test.sh")], INFRA, cli_environment())
 
-    def test_api_initialization_failure(self):
-        self.mocked_workspace()
-        before = (self.work / ".env.production").read_bytes()
-        self.assertNotEqual(self.make("deploy-api", ["VERSION=sha-" + NEW_SHA], {"FAIL_STORAGE_INIT": "true"}, False).returncode, 0)
-        self.assertEqual((self.work / ".env.production").read_bytes(), before)
-        commands = self.trace_commands()
-        # Failed candidate initializer never reaches startup; only restored image is started.
-        self.assertEqual(sum("api-storage-init" in args for args in commands), 2)
-        self.assertEqual(sum("up" in args for args in commands), 1)
+    def test_acceptance_backup_isolation(self):
+        spec = importlib.util.spec_from_file_location("acceptance_runtime", INFRA / "scripts/verification/runtime.py")
+        runtime = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runtime)
+        state = {"privateDir": str(self.work), "stacks": {"qa": {
+            "volumes": {"postgres-data": "boero-acceptance-owned-postgres"},
+            "containers": {"postgres": "fixture-postgres"}}}}
+        checks = []
+        def owned(*args):
+            checks.append(args[1:])
+        def run(args, **kwargs):
+            self.assertEqual(checks, [("volume", "boero-acceptance-owned-postgres"),
+                                      ("container", "fixture-postgres")])
+            self.assertIn("BACKUP_POSTGRES_VOLUME=boero-acceptance-owned-postgres", args)
+            self.assertIn(f"BACKUP_DIR={self.work / 'backups'}", args)
+            self.assertNotIn("boero-api-postgres-data-staging", " ".join(map(str, args)))
+            raise RuntimeError("synthetic stop before Docker")
+        with mock.patch.object(runtime, "owned", side_effect=owned), mock.patch.object(runtime, "run", side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, "synthetic stop before Docker"):
+                runtime.check_backup(state, {})
 
     def test_publication_gates(self):
         for repo in (API, UI):
@@ -490,21 +402,12 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
             "AUTO_LOGIN_USER_ID": "00000000-0000-0000-0000-000000000001",
             "AUTO_LOGIN_INSTITUTION_ID": "00000000-0000-0000-0000-000000000002",
         }
-        for environment, profile in (("staging", "staging"), ("production", "prod")):
-            rendered = self.render(environment, values)
-            self.assertEqual(rendered["name"], f"boero-{environment}")
-            self.assertEqual(rendered["networks"]["default"]["name"], f"boero-network-{environment}")
-            self.assertEqual(rendered["services"]["api"]["environment"]["SPRING_PROFILES_ACTIVE"], profile)
-            for service in ("ui", "api", "postgres", "redis"):
-                configured = rendered["services"][service]
-                self.assertEqual(configured["container_name"], f"boero-{service}-{environment}")
-                for port in configured.get("ports", []):
-                    self.assertEqual(port["host_ip"], "127.0.0.1")
-                for key in ("AUTO_LOGIN_ENABLED", "AUTO_LOGIN_USER_ID", "AUTO_LOGIN_INSTITUTION_ID"):
-                    if environment == "staging" and (service == "api" or service == "ui" and key == "AUTO_LOGIN_ENABLED"):
-                        self.assertEqual(configured["environment"][key], values[key])
-                    else:
-                        self.assertNotIn(key, configured.get("environment", {}))
+        rendered = self.render(values)
+        self.assertEqual(rendered["services"]["api"]["environment"]["SPRING_PROFILES_ACTIVE"], "staging")
+        for service in ("ui", "api"):
+            keys = ("AUTO_LOGIN_ENABLED",) if service == "ui" else tuple(k for k in values if k.startswith("AUTO_LOGIN_"))
+            for key in keys:
+                self.assertEqual(rendered["services"][service]["environment"][key], values[key])
 
     def test_dokploy_staging_workflows(self):
         bindir = self.work / "workflow-bin"
@@ -559,7 +462,6 @@ sys.exit(int(os.environ.get('CURL_EXIT', '0')))
                              environment | {"CURL_EXIT": "22"}, False)
             self.assertEqual(failed.returncode, 22)
 
-
     def test_documented_contract(self):
         template = (INFRA / ".env.dokploy.staging.example").read_text()
         values = dict(line.split("=", 1) for line in template.splitlines() if line and not line.startswith("#"))
@@ -569,9 +471,12 @@ sys.exit(int(os.environ.get('CURL_EXIT', '0')))
         for key in ("DB_PASSWORD", "JWT_SECRET", "REFRESH_REPLAY_ENCRYPTION_KEY"):
             self.assertIn(key, values)
         self.assertIn("Dokploy", (INFRA / "docs/DOKPLOY-STAGING.md").read_text())
-        self.assertIn("ya no describe estos archivos", (INFRA / "docs/STAGING.md").read_text())
-        for script in ("prepare-volumes.sh", "bootstrap.sh", "deploy-service.sh", "rollback-service.sh", "backup-postgres.sh"):
-            command(["sh", "-n", str(INFRA / "scripts" / script)], INFRA)
+        for removed in ("compose.staging.yaml", "compose.production.yaml", ".env.example",
+                        "docs/STAGING.md", "docs/PRODUCTION.md", "deploy/nginx/boero.conf.example",
+                        "scripts/bootstrap.sh", "scripts/prepare-volumes.sh", "scripts/deploy-service.sh",
+                        "scripts/rollback-service.sh"):
+            self.assertFalse((INFRA / removed).exists(), removed)
+        command(["sh", "-n", str(INFRA / "scripts/backup-postgres.sh")], INFRA)
 
 class Results(unittest.TextTestResult):
     statuses = {}
@@ -602,7 +507,7 @@ if __name__ == "__main__":
         evidence.parent.mkdir(parents=True, exist_ok=True)
         report = evidence.with_name("infra-config-report.json")
         report.write_text(json.dumps({"tests": result.statuses, "output": output.getvalue(), "commands": COMMANDS,
-                                      "boundary": "config, mocked Docker orchestration, local Git workflow validation; no live deployment"}, indent=2))
+                                      "boundary": "Compose config, mocked backups and HTTPS deploy requests; no live deployment"}, indent=2))
         cases = {case: {"status": "passed" if all(result.statuses.get(test) == "passed" for test in tests) else "failed",
                         "artifact": str(report)} for case, tests in CASE_TESTS.items()}
         evidence.write_text(json.dumps(cases, indent=2))

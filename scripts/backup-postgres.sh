@@ -4,20 +4,14 @@ set -eu
 environment="${1:-}"
 
 case "$environment" in
-  staging|production) ;;
-  *) echo "Environment must be staging or production" >&2; exit 1 ;;
+  staging) ;;
+  *) echo "Environment must be staging" >&2; exit 1 ;;
 esac
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_dir"
 
 env_file=".env.$environment"
-environment_compose_file="compose.$environment.yaml"
-
-if [ "$environment" != "staging" ] && [ ! -f "$env_file" ]; then
-  echo "Missing $env_file" >&2
-  exit 1
-fi
 
 read_env_value() {
   key="$1"
@@ -41,18 +35,18 @@ case "$retention_days" in
   0) echo "BACKUP_RETENTION_DAYS must be greater than zero" >&2; exit 1 ;;
 esac
 
-if [ "$environment" = "staging" ]; then
-  postgres_containers="$(docker ps \
-    --filter volume=boero-api-postgres-data-staging \
-    --filter label=com.docker.compose.service=postgres \
-    --format '{{.ID}}')"
-  set -- $postgres_containers
-  if [ "$#" -ne 1 ]; then
-    echo "Expected exactly one running staging PostgreSQL container; found $#" >&2
-    exit 1
-  fi
-  postgres_container="$1"
+# The override lets disposable acceptance fixtures use only their own volume.
+postgres_volume="${BACKUP_POSTGRES_VOLUME:-boero-api-postgres-data-staging}"
+postgres_containers="$(docker ps \
+  --filter "volume=$postgres_volume" \
+  --filter label=com.docker.compose.service=postgres \
+  --format '{{.ID}}')"
+set -- $postgres_containers
+if [ "$#" -ne 1 ]; then
+  echo "Expected exactly one running staging PostgreSQL container; found $#" >&2
+  exit 1
 fi
+postgres_container="$1"
 
 backup_dir="$backup_root/$environment"
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -64,15 +58,7 @@ mkdir -p "$backup_dir"
 trap 'rm -f "$temporary_file"' EXIT HUP INT TERM
 
 run_postgres() {
-  if [ "$environment" = "staging" ]; then
-    docker exec -i "$postgres_container" "$@"
-  else
-    docker compose \
-      --env-file "$env_file" \
-      -f compose.yaml \
-      -f "$environment_compose_file" \
-      exec -T postgres "$@"
-  fi
+  docker exec -i "$postgres_container" "$@"
 }
 
 run_postgres sh -c \

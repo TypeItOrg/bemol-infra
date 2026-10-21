@@ -603,15 +603,13 @@ def check_backup(state, observations):
     workspace.mkdir(mode=0o700, exist_ok=True)
     (workspace / "scripts").mkdir(mode=0o700, exist_ok=True)
     shutil.copy2(ROOT / "scripts/backup-postgres.sh", workspace / "scripts/backup-postgres.sh")
-    # Snapshot is private: rendered environment contains synthetic credentials. No existing .env is used.
-    rendered = compose(state, key, "config", "--format", "json").stdout
-    (workspace / "compose.yaml").write_text(rendered)
-    (workspace / "compose.production.yaml").write_text("{}\n")
-    shutil.copy2(item["envFile"], workspace / ".env.production")
-    for file in (workspace / "compose.yaml", workspace / "compose.production.yaml", workspace / ".env.production"):
-        file.chmod(0o600)
-    run(["sh", workspace / "scripts/backup-postgres.sh", "production"], cwd=workspace)
-    archives = sorted((private / "backups/production").glob("*.dump"))
+    # Prove ownership before targeting the fixture volume; never use staging's default.
+    owned(state, "volume", item["volumes"]["postgres-data"])
+    owned(state, "container", item["containers"]["postgres"])
+    run(["env", f"BACKUP_POSTGRES_VOLUME={item['volumes']['postgres-data']}",
+         f"BACKUP_DIR={private / 'backups'}", "BACKUP_RETENTION_DAYS=7",
+         "sh", workspace / "scripts/backup-postgres.sh", "staging"], cwd=workspace)
+    archives = sorted((private / "backups/staging").glob("*.dump"))
     if not archives or not archives[-1].stat().st_size or archives[-1].stat().st_mode & 0o077:
         raise RuntimeFailure("Backup archive missing/empty or readable by others")
     archive = archives[-1]

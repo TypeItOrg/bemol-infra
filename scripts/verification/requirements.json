@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "completionBoundary": "local-only",
   "requirements": {
     "Q01": [
@@ -11,12 +11,12 @@
       "flyway-health"
     ],
     "Q03": [
-      "legacy-operations",
+      "backup-safety",
       "backup-restore"
     ],
     "Q04": [
       "invalid-input",
-      "failed-deploy-rollback"
+      "failed-deploy-request"
     ],
     "C01": [
       "publication-gates",
@@ -233,9 +233,6 @@
     "Q04.invalid-input": [
       "configuration"
     ],
-    "Q04.failed-deploy-rollback": [
-      "configuration"
-    ],
     "C01.publication-gates": [
       "configuration"
     ],
@@ -260,7 +257,10 @@
     "Q02.persistent-readiness": [
       "configuration"
     ],
-    "Q03.legacy-operations": [
+    "Q03.backup-safety": [
+      "configuration"
+    ],
+    "Q04.failed-deploy-request": [
       "configuration"
     ]
   },
@@ -281,9 +281,8 @@
   "sourcePaths": {
     "Q01": [
       "infra/compose.yaml",
-      "infra/compose.staging.yaml",
-      "infra/compose.production.yaml",
-      "infra/compose.dokploy.staging.yaml"
+      "infra/compose.dokploy.staging.yaml",
+      "infra/scripts/verification/runtime.py"
     ],
     "Q02": [
       "infra/docker/postgres-entrypoint.sh",
@@ -291,14 +290,15 @@
     ],
     "Q03": [
       "infra/Makefile",
-      "infra/scripts/bootstrap.sh",
-      "infra/scripts/deploy-service.sh",
-      "infra/scripts/backup-postgres.sh"
+      "infra/scripts/backup-postgres.sh",
+      "infra/tests/backup-postgres.test.sh",
+      "infra/scripts/verification/runtime.py"
     ],
     "Q04": [
-      "infra/scripts/deploy-service.sh",
-      "infra/scripts/rollback-service.sh",
-      "infra/tests/infra-config.test.py"
+      "infra/Makefile",
+      "infra/tests/infra-config.test.py",
+      "api/.github/workflows/deploy-staging.yaml",
+      "ui/.github/workflows/deploy-staging.yaml"
     ],
     "C01": [
       "api/.github/workflows/ci.yaml",
@@ -362,6 +362,7 @@
     "D01": [
       "infra/docs/institutional-access-checklist.md",
       "infra/docs/DOKPLOY-STAGING.md",
+      "infra/docs/DOKPLOY-STAGING-REFERENCIA.md",
       "infra/.env.dokploy.staging.example",
       "api/.env.dev.example",
       "ui/.env.example"

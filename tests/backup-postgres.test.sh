@@ -4,7 +4,7 @@ set -eu
 root_dir="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
-unset BACKUP_DIR BACKUP_RETENTION_DAYS CONTAINER_COUNT FAIL_PS FAIL_DUMP FAIL_VALIDATION
+unset BACKUP_DIR BACKUP_RETENTION_DAYS CONTAINER_COUNT FAIL_PS FAIL_DUMP FAIL_VALIDATION BACKUP_POSTGRES_VOLUME
 
 mkdir -p "$test_dir/bin" "$test_dir/scripts"
 cp "$root_dir/scripts/backup-postgres.sh" "$test_dir/scripts/backup-postgres.sh"
@@ -30,19 +30,6 @@ case "$1" in
     [ "$3" = "abc123" ]
     shift 3
     ;;
-  compose)
-    [ "$2" = "--env-file" ]
-    [ "$3" = ".env.$EXPECTED_ENV" ]
-    [ "$4" = "-f" ]
-    [ "$5" = "compose.yaml" ]
-    [ "$6" = "-f" ]
-    [ "$7" = "compose.$EXPECTED_ENV.yaml" ]
-    [ "$8" = "exec" ]
-    [ "$9" = "-T" ]
-    shift 9
-    [ "$1" = "postgres" ]
-    shift
-    ;;
   *) exit 1 ;;
 esac
 
@@ -62,7 +49,7 @@ chmod +x "$test_dir/bin/docker"
 
 reset_case() {
   rm -rf "$test_dir/backups"
-  rm -f "$test_dir/.env.staging" "$test_dir/.env.production"
+  rm -f "$test_dir/.env.staging"
   mkdir -p "$test_dir/backups/$1"
   old_archive="$test_dir/backups/$1/boero-$1-20000101T000000Z.dump"
   printf 'old archive\n' > "$old_archive"
@@ -71,7 +58,7 @@ reset_case() {
 }
 
 run_backup() {
-  EXPECTED_ENV="$1" PATH="$test_dir/bin:$PATH" \
+  PATH="$test_dir/bin:$PATH" \
     sh "$test_dir/scripts/backup-postgres.sh" "$1"
 }
 
@@ -90,16 +77,10 @@ assert_preserved() {
   [ -z "$(find "$test_dir/backups" -name '*.tmp' -print)" ]
 }
 
-for environment in production; do
-  reset_case "$environment"
-  printf 'BACKUP_DIR=%s/backups\nBACKUP_RETENTION_DAYS=7\n' "$test_dir" > "$test_dir/.env.$environment"
-  run_backup "$environment"
-  assert_success "$environment"
-  ! grep -q '^ps\|^exec ' "$TRACE"
-
-  reset_case "$environment"
+for environment in production qa unknown ../staging 'staging production' ''; do
+  reset_case staging
   if BACKUP_DIR="$test_dir/backups" run_backup "$environment"; then
-    echo "Expected $environment to require its environment file" >&2
+    echo "Expected an unsupported environment to be rejected" >&2
     exit 1
   fi
   [ ! -s "$TRACE" ]
@@ -115,6 +96,12 @@ grep -qx 'ps --filter volume=boero-api-postgres-data-staging --filter label=com.
 ! grep -q '^compose ' "$TRACE"
 grep -q 'DB_NAME.*POSTGRES_USER' "$TRACE"
 ! grep -q 'POSTGRES_DB' "$TRACE"
+
+reset_case staging
+BACKUP_DIR="$test_dir/backups" BACKUP_POSTGRES_VOLUME=boero-acceptance-fixture-postgres-data run_backup staging
+assert_success staging
+grep -qx 'ps --filter volume=boero-acceptance-fixture-postgres-data --filter label=com.docker.compose.service=postgres --format {{.ID}}' "$TRACE"
+! grep -q 'boero-api-postgres-data-staging' "$TRACE"
 
 reset_case staging
 printf 'BACKUP_DIR=%s/unused\nBACKUP_RETENTION_DAYS=99999\n' "$test_dir" > "$test_dir/.env.staging"
@@ -135,6 +122,24 @@ for count in 0 2; do
   ! grep -q '^exec ' "$TRACE"
   assert_preserved
 done
+
+for retention in 0 -1 invalid; do
+  reset_case staging
+  if BACKUP_DIR="$test_dir/backups" BACKUP_RETENTION_DAYS="$retention" run_backup staging; then
+    echo "Expected invalid retention to reject the backup" >&2
+    exit 1
+  fi
+  [ ! -s "$TRACE" ]
+  assert_preserved
+done
+
+reset_case staging
+if BACKUP_DIR=relative-path run_backup staging; then
+  echo "Expected a relative backup directory to be rejected" >&2
+  exit 1
+fi
+[ ! -s "$TRACE" ]
+assert_preserved
 
 for failure in FAIL_PS FAIL_DUMP FAIL_VALIDATION; do
   reset_case staging

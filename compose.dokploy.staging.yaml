@@ -1,4 +1,4 @@
-# Standalone Compose entrypoint for Dokploy; do not combine with legacy overlays.
+# Compose entrypoint for Dokploy; deploy this file, not the base on its own.
 # Supply both *_VERSION variables: the extended base requires them before merging.
 services:
   ui:
@@ -42,6 +42,7 @@ services:
         aliases:
           - boero-ui-staging
     labels:
+      # Dokploy enables routing here when a native UI domain is configured.
       traefik.enable: "false"
 
   api:

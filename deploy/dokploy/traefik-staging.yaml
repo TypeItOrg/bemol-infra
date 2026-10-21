@@ -1,26 +1,20 @@
 # Install as a separate file under Dokploy's Traefik dynamic directory.
 # Do not paste into the main/static config or replace Dokploy's other files.
+# General HTTP/HTTPS routing is managed in Dokploy Domains.
+# Keep wildcard/specialized routers and shared middlewares here.
 http:
   routers:
-    boero-staging:
-      entryPoints: [websecure]
-      rule: Host(`staging.typeit.com.ar`)
-      priority: 100
-      service: boero-staging
-      middlewares: [boero-cloudflare-only, boero-common, boero-rate-cloudflare, boero-flight-cloudflare, boero-flight-host]
-      tls: &staging-tls
-        certResolver: cloudflare-staging
-        domains:
-          - main: staging.typeit.com.ar
-            sans: ["*.staging.typeit.com.ar"]
-
     boero-staging-institutions:
       entryPoints: [websecure]
       rule: HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`)
       priority: 100
       service: boero-staging
       middlewares: [boero-direct, boero-common, boero-rate-direct, boero-flight-direct, boero-flight-host]
-      tls: *staging-tls
+      tls: &staging-tls
+        certResolver: cloudflare-staging
+        domains:
+          - main: staging.typeit.com.ar
+            sans: ["*.staging.typeit.com.ar"]
 
     boero-staging-write:
       entryPoints: [websecure]
@@ -72,7 +66,7 @@ http:
 
     boero-staging-http:
       entryPoints: [web]
-      rule: Host(`staging.typeit.com.ar`) || HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`)
+      rule: HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`)
       service: noop@internal
       middlewares: [boero-canonical, boero-https]
 
