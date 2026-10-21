@@ -29,6 +29,10 @@ El usuario renombró los repositorios remotos a `bemol-api`, `bemol-ui` y `bemol
   respaldos existentes a `/var/backups/bemol`; se renombraron unidades/timer,
   preservando configuración y marca temporal. El timer Bemol quedó enabled/active,
   sin invocar el backup oneshot ni crear otra copia de datos.
+- También se actualizaron los identificadores de base/rol e imágenes del
+  `.env.staging` operativo, conservando sus pins SHA con releases Bemol y sin
+  ejecutar el stack desde ese archivo. Credenciales y las demás líneas quedaron
+  intactas; esta configuración es independiente de las variables de Dokploy.
 - API, UI, PostgreSQL y Redis quedaron healthy; el inicializador de storage salió
   con código cero. Se verificaron los manifests SHA del corte. El flujo cotidiano
   conserva `UI_VERSION=staging` y `API_VERSION=staging`; guardar variables no cambia
