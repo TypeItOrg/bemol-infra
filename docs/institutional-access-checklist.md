@@ -118,10 +118,6 @@ impide el cleanup, el comando falla y conserva el archivo de ownership privado
 python3 scripts/verification/runtime.py stop --state /tmp/bemol-acceptance-state-<run-id>.json
 ```
 
-Los estados anteriores al renombre siguen admitidos para recuperar su cleanup:
-usar su ruta original, sin renombrar el archivo, namespace ni labels de recursos.
-El driver conserva las comprobaciones de ownership y nunca limpia recursos ajenos.
-
 No usar `docker system prune`, `compose down -v` sobre proyectos compartidos ni
 borrar recursos manualmente para hacer pasar el gate. Las imágenes locales de
 aceptación quedan disponibles (no se eliminan imágenes ajenas). Opcionalmente

@@ -156,8 +156,7 @@ def load_state(path):
     if not path.is_file() or path.stat().st_uid != os.getuid() or path.stat().st_mode & 0o077:
         raise RuntimeFailure("Private state is missing, not owned by caller, or readable by others")
     state = json.loads(path.read_text())
-    # Historical states remain recoverable for ownership-checked cleanup.
-    if not re.fullmatch(r"(?:bemol|boero)-acceptance-[a-f0-9]{20}", state.get("namespace", "")):
+    if not re.fullmatch(r"bemol-acceptance-[a-f0-9]{20}", state.get("namespace", "")):
         raise RuntimeFailure("Invalid acceptance namespace")
     if not re.fullmatch(r"[a-f0-9]{32}", state.get("owner", "")):
         raise RuntimeFailure("Invalid acceptance ownership marker")
@@ -198,8 +197,7 @@ def owned(state, kind, identifier):
         name = data["Name"]
         labels = data.get("Labels", {})
         captured = data.get("Id", name)
-    label, owner = ownership_labels(state)
-    if not name.startswith(state["namespace"] + "-") or labels.get(label) != state["namespace"] or labels.get(owner) != state["owner"]:
+    if not name.startswith(state["namespace"] + "-") or labels.get(LABEL) != state["namespace"] or labels.get(OWNER) != state["owner"]:
         raise RuntimeFailure(f"Refusing non-owned {kind}: {name}")
     baseline = state["baseline"][{"container": "containers", "volume": "volumes", "network": "networks"}[kind]]
     if captured in baseline or any(captured.startswith(old) for old in baseline if kind == "network"):
@@ -207,19 +205,12 @@ def owned(state, kind, identifier):
     return data
 
 
-def ownership_labels(state):
-    # Derive the historical label pair from validated state; never broaden ownership.
-    product = state["namespace"].split("-acceptance-", 1)[0]
-    return f"io.{product}.acceptance.namespace", f"io.{product}.acceptance.owner"
-
-
 def capture_owned(state, state_path):
-    label, owner = ownership_labels(state)
     records = {}
     for kind, args in (("containers", ("ps", "-aq")), ("volumes", ("volume", "ls", "-q")),
                        ("networks", ("network", "ls", "-q"))):
-        found = docker(*args, "--filter", f"label={label}={state['namespace']}",
-                       "--filter", f"label={owner}={state['owner']}").stdout.split()
+        found = docker(*args, "--filter", f"label={LABEL}={state['namespace']}",
+                       "--filter", f"label={OWNER}={state['owner']}").stdout.split()
         singular = {"containers": "container", "volumes": "volume", "networks": "network"}[kind]
         records[kind] = []
         for identifier in found:

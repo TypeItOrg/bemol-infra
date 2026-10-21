@@ -252,8 +252,7 @@ def preservation_checks(before, out):
             all(after["repos"][name][field] == value[field] for field in ("head", "branch", "private_env_sha256"))
             and value.get("status") == "" and subprocess.run(["git", "diff", "--cached", "--quiet", "HEAD"],
                 cwd=REPOS[name]).returncode == 0
-            # Historical preservation baselines predate the repository rename.
-            for name, value in ((key.removeprefix("bemol-").removeprefix("boero-"), data) for key, data in repos.items()))))
+            for name, value in ((key.removeprefix("bemol-"), data) for key, data in repos.items()))))
         comparisons.append(("Original task Docker resources preserved", all(after["containers"].get(name) == value
             for name, value in containers["containers"].items()) and set(containers["volumes"]).issubset(after["volumes"])))
     paths = subprocess.check_output(["git", "ls-files", "src/main/resources/db/migration"], cwd=REPOS["api"]).decode().splitlines()

@@ -184,7 +184,7 @@ La sintaxis y el render de Compose no prueban la migración ni la existencia de
 imágenes/destinos remotos. El cambio no está listo para un deploy automático sobre
 el entorno previo sin completar los pasos operativos anteriores.
 
-El harness genera nuevos namespaces/labels/archivos de estado `bemol-acceptance-*`.
-Sus estados previos conservan su ruta y labels originales para que el cleanup
-verificado por ownership siga pudiendo recuperarlos. Esto no elimina recursos ni
-modifica evidencias existentes; no renombrar manualmente sus archivos de estado.
+El harness sólo admite namespaces/labels/archivos de estado `bemol-acceptance-*`.
+Se retiró la compatibilidad anterior tras verificar que no había estados ni
+recursos locales de aceptación pendientes de cleanup. No se modifican evidencias
+históricas ni se amplía la limpieza a recursos ajenos.
