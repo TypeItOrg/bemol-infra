@@ -1,8 +1,10 @@
 # Shared service definitions for Dokploy and disposable local acceptance fixtures.
 # The deployed entrypoint is compose.dokploy.staging.yaml.
+name: bemol
+
 services:
   ui:
-    image: ${UI_IMAGE:-ghcr.io/typeitorg/boero-ui}:${UI_VERSION:?UI_VERSION is required}
+    image: ${UI_IMAGE:-ghcr.io/typeitorg/bemol-ui}:${UI_VERSION:?UI_VERSION is required}
     pull_policy: always
     init: true
     ports:
@@ -37,7 +39,7 @@ services:
         max-file: ${LOG_MAX_FILES:-5}
 
   api:
-    image: &api-image ${API_IMAGE:-ghcr.io/typeitorg/boero-api}:${API_VERSION:?API_VERSION is required}
+    image: &api-image ${API_IMAGE:-ghcr.io/typeitorg/bemol-api}:${API_VERSION:?API_VERSION is required}
     pull_policy: always
     init: true
     ports:
@@ -47,7 +49,7 @@ services:
       STORAGE_LOCAL_DIR: /app/storage
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
       STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-}
-      STORAGE_S3_PREFIX: ${STORAGE_S3_PREFIX:-boero/}
+      STORAGE_S3_PREFIX: ${STORAGE_S3_PREFIX:-bemol/}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}

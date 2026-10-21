@@ -5,7 +5,7 @@ Description=Daily Bemol PostgreSQL backup for %i
 OnCalendar=*-*-* 02:15:00
 RandomizedDelaySec=15m
 Persistent=true
-Unit=boero-backup@%i.service
+Unit=bemol-backup@%i.service
 
 [Install]
 WantedBy=timers.target

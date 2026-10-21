@@ -252,7 +252,8 @@ def preservation_checks(before, out):
             all(after["repos"][name][field] == value[field] for field in ("head", "branch", "private_env_sha256"))
             and value.get("status") == "" and subprocess.run(["git", "diff", "--cached", "--quiet", "HEAD"],
                 cwd=REPOS[name]).returncode == 0
-            for name, value in ((key.removeprefix("boero-"), data) for key, data in repos.items()))))
+            # Historical preservation baselines predate the repository rename.
+            for name, value in ((key.removeprefix("bemol-").removeprefix("boero-"), data) for key, data in repos.items()))))
         comparisons.append(("Original task Docker resources preserved", all(after["containers"].get(name) == value
             for name, value in containers["containers"].items()) and set(containers["volumes"]).issubset(after["volumes"])))
     paths = subprocess.check_output(["git", "ls-files", "src/main/resources/db/migration"], cwd=REPOS["api"]).decode().splitlines()
@@ -270,7 +271,7 @@ def preservation_checks(before, out):
 def runtime_checks(out, private):
     # Keep recoverable ownership state outside the raw-log directory. If cleanup is
     # rejected or Docker becomes unavailable, deleting logs must not orphan resources.
-    state_path = Path("/tmp") / ("boero-acceptance-state-" + RUN_ID + ".json")
+    state_path = Path("/tmp") / ("bemol-acceptance-state-" + RUN_ID + ".json")
     driver = ["python3", str(HERE / "runtime.py")]
     try:
         code, _ = run("runtime-start", [*driver, "start", "--state", str(state_path), "--artifacts", str(out / "runtime")], ROOT, private)
@@ -326,7 +327,7 @@ def main():
     # Even read-only inventory must not accidentally reach a remote Docker daemon.
     unittest_module(HERE / "runtime.py").require_local_daemon()
     before = capture_preservation()
-    with tempfile.TemporaryDirectory(prefix="boero-acceptance-run-", dir="/tmp") as directory:
+    with tempfile.TemporaryDirectory(prefix="bemol-acceptance-run-", dir="/tmp") as directory:
         private = Path(directory)
         private.chmod(0o700)
         try:

@@ -19,8 +19,8 @@ import unittest
 from unittest import mock
 
 INFRA = Path(__file__).resolve().parents[1]
-API = Path(os.environ.get("API_REPO", INFRA.parent / "boero-api")).resolve()
-UI = Path(os.environ.get("UI_REPO", INFRA.parent / "boero-ui")).resolve()
+API = Path(os.environ.get("API_REPO", INFRA.parent / "bemol-api")).resolve()
+UI = Path(os.environ.get("UI_REPO", INFRA.parent / "bemol-ui")).resolve()
 COMMANDS = []
 OLD_SHA = "a" * 40
 NEW_SHA = "b" * 40
@@ -116,7 +116,7 @@ def run_block(workflow, step):
 
 class InfraConfigTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="boero-infra-config-")
+        self.temporary = tempfile.TemporaryDirectory(prefix="bemol-infra-config-")
         self.addCleanup(self.temporary.cleanup)
         self.work = Path(self.temporary.name)
 
@@ -132,7 +132,7 @@ class InfraConfigTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("acceptance_runtime", INFRA / "scripts/verification/runtime.py")
         runtime = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(runtime)
-        state = {"namespace": "boero-acceptance-synthetic", "owner": "synthetic-owner", "tlsPort": 8443,
+        state = {"namespace": "bemol-acceptance-synthetic", "owner": "synthetic-owner", "tlsPort": 8443,
                  "images": {"api": {"tag": "synthetic-api:local"}, "ui": {"tag": "synthetic-ui:local"}}, "stacks": {}}
         configs = []
         for key in ("qa", "staging"):
@@ -173,15 +173,16 @@ class InfraConfigTests(unittest.TestCase):
                          INFRA, cli_environment())
         configured = json.loads(result.stdout)
         expected_volumes = {
-            "ui-next-cache": "boero-ui-next-cache-staging",
-            "postgres-data": "boero-api-postgres-data-staging",
-            "redis-data": "boero-api-redis-data-staging",
-            "api-logs": "boero-api-logs-staging",
-            "api-storage": "boero-api-enrollment-storage-staging",
+            "ui-next-cache": "bemol-ui-next-cache-staging",
+            "postgres-data": "bemol-api-postgres-data-staging",
+            "redis-data": "bemol-api-redis-data-staging",
+            "api-logs": "bemol-api-logs-staging",
+            "api-storage": "bemol-api-enrollment-storage-staging",
         }
         self.assertEqual(configured["volumes"], {key: {"external": True, "name": name}
                                                  for key, name in expected_volumes.items()})
         services = configured["services"]
+        self.assertEqual(services["postgres"]["environment"]["DB_REQUIRE_EXISTING"], "true")
         self.assertEqual(set(services), {"ui", "api", "postgres", "redis", "api-storage-init"})
         self.assertNotIn("ports", services["ui"])
         api_ports = services["api"]["ports"]
@@ -193,7 +194,7 @@ class InfraConfigTests(unittest.TestCase):
                 self.assertNotIn("ports", service)
             self.assertEqual("dokploy-network" in service.get("networks", {}), name == "ui")
         self.assertEqual(set(services["ui"]["networks"]), {"default", "dokploy-network"})
-        self.assertEqual(configured["networks"]["default"]["name"], "boero-network-staging")
+        self.assertEqual(configured["networks"]["default"]["name"], "bemol-network-staging")
         self.assertTrue(configured["networks"]["default"]["external"])
         self.assertTrue(configured["networks"]["dokploy-network"]["external"])
         self.assertEqual(services["api"]["depends_on"]["api-storage-init"]["condition"],
@@ -218,7 +219,7 @@ class InfraConfigTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("acceptance_runtime", INFRA / "scripts/verification/runtime.py")
         runtime = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(runtime)
-        state = {"namespace": "boero-acceptance-synthetic", "owner": "synthetic-owner", "tlsPort": 8443,
+        state = {"namespace": "bemol-acceptance-synthetic", "owner": "synthetic-owner", "tlsPort": 8443,
                  "images": {"api": {"tag": "synthetic-api:local"}, "ui": {"tag": "synthetic-ui:local"}}, "stacks": {}}
         runtime.make_stack(state, "qa", "testing.typeit.com.ar", self.work)
         stack = state["stacks"]["qa"]
@@ -317,7 +318,7 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("No rule to make target", result.stderr)
         backup = command(["make", "-n", "backup-db", "ENV=staging"], INFRA, cli_environment())
-        self.assertIn("flock /tmp/boero-infra-staging.lock ./scripts/backup-postgres.sh staging", backup.stdout)
+        self.assertIn("flock /tmp/bemol-infra-staging.lock ./scripts/backup-postgres.sh staging", backup.stdout)
 
     def test_backup_safety(self):
         command(["sh", str(INFRA / "tests/backup-postgres.test.sh")], INFRA, cli_environment())
@@ -327,17 +328,17 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
         runtime = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(runtime)
         state = {"privateDir": str(self.work), "stacks": {"qa": {
-            "volumes": {"postgres-data": "boero-acceptance-owned-postgres"},
+            "volumes": {"postgres-data": "bemol-acceptance-owned-postgres"},
             "containers": {"postgres": "fixture-postgres"}}}}
         checks = []
         def owned(*args):
             checks.append(args[1:])
         def run(args, **kwargs):
-            self.assertEqual(checks, [("volume", "boero-acceptance-owned-postgres"),
+            self.assertEqual(checks, [("volume", "bemol-acceptance-owned-postgres"),
                                       ("container", "fixture-postgres")])
-            self.assertIn("BACKUP_POSTGRES_VOLUME=boero-acceptance-owned-postgres", args)
+            self.assertIn("BACKUP_POSTGRES_VOLUME=bemol-acceptance-owned-postgres", args)
             self.assertIn(f"BACKUP_DIR={self.work / 'backups'}", args)
-            self.assertNotIn("boero-api-postgres-data-staging", " ".join(map(str, args)))
+            self.assertNotIn("bemol-api-postgres-data-staging", " ".join(map(str, args)))
             raise RuntimeError("synthetic stop before Docker")
         with mock.patch.object(runtime, "owned", side_effect=owned), mock.patch.object(runtime, "run", side_effect=run):
             with self.assertRaisesRegex(RuntimeError, "synthetic stop before Docker"):
@@ -424,7 +425,7 @@ sys.exit(int(os.environ.get('CURL_EXIT', '0')))
                   "DOKPLOY_STAGING_COMPOSE_ID": 'compose "quoted" \\ $(touch injected)'}
         environment = cli_environment() | values | {"PATH": str(bindir) + ":" + os.environ["PATH"],
                                                     "DOKPLOY_TRACE": str(request), "GITHUB_SHA": NEW_SHA,
-                                                    "GITHUB_REPOSITORY": "typeitorg/boero-synthetic"}
+                                                    "GITHUB_REPOSITORY": "typeitorg/bemol-synthetic"}
         for repo in (API, UI):
             workflow = (repo / ".github/workflows/deploy-staging.yaml").read_text()
             deploy = job(workflow, "deploy-staging")
@@ -449,7 +450,7 @@ sys.exit(int(os.environ.get('CURL_EXIT', '0')))
             self.assertIn("Content-Type: application/json", args)
             self.assertEqual(json.loads(args[args.index("--data") + 1]),
                              {"composeId": values["DOKPLOY_STAGING_COMPOSE_ID"],
-                              "title": "typeitorg/boero-synthetic@" + NEW_SHA})
+                              "title": "typeitorg/bemol-synthetic@" + NEW_SHA})
             self.assertNotIn(values["DOKPLOY_API_KEY"], result.stdout + result.stderr)
             self.assertFalse((self.work / "injected").exists())
             for missing in values:
@@ -472,7 +473,7 @@ sys.exit(int(os.environ.get('CURL_EXIT', '0')))
             self.assertIn(key, values)
         self.assertIn("Dokploy", (INFRA / "docs/DOKPLOY-STAGING.md").read_text())
         for removed in ("compose.staging.yaml", "compose.production.yaml", ".env.example",
-                        "docs/STAGING.md", "docs/PRODUCTION.md", "deploy/nginx/boero.conf.example",
+                        "docs/STAGING.md", "docs/PRODUCTION.md", "deploy/nginx",
                         "scripts/bootstrap.sh", "scripts/prepare-volumes.sh", "scripts/deploy-service.sh",
                         "scripts/rollback-service.sh"):
             self.assertFalse((INFRA / removed).exists(), removed)

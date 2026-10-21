@@ -51,7 +51,7 @@ reset_case() {
   rm -rf "$test_dir/backups"
   rm -f "$test_dir/.env.staging"
   mkdir -p "$test_dir/backups/$1"
-  old_archive="$test_dir/backups/$1/boero-$1-20000101T000000Z.dump"
+  old_archive="$test_dir/backups/$1/bemol-$1-20000101T000000Z.dump"
   printf 'old archive\n' > "$old_archive"
   touch -t 200001010000 "$old_archive"
   : > "$TRACE"
@@ -90,7 +90,7 @@ done
 reset_case staging
 BACKUP_DIR="$test_dir/backups" run_backup staging
 assert_success staging
-grep -qx 'ps --filter volume=boero-api-postgres-data-staging --filter label=com.docker.compose.service=postgres --format {{.ID}}' "$TRACE"
+grep -qx 'ps --filter volume=bemol-api-postgres-data-staging --filter label=com.docker.compose.service=postgres --format {{.ID}}' "$TRACE"
 [ "$(grep -c '^ps ' "$TRACE")" -eq 1 ]
 [ "$(grep -c '^exec -i abc123 ' "$TRACE")" -eq 2 ]
 ! grep -q '^compose ' "$TRACE"
@@ -98,10 +98,10 @@ grep -q 'DB_NAME.*POSTGRES_USER' "$TRACE"
 ! grep -q 'POSTGRES_DB' "$TRACE"
 
 reset_case staging
-BACKUP_DIR="$test_dir/backups" BACKUP_POSTGRES_VOLUME=boero-acceptance-fixture-postgres-data run_backup staging
+BACKUP_DIR="$test_dir/backups" BACKUP_POSTGRES_VOLUME=bemol-acceptance-fixture-postgres-data run_backup staging
 assert_success staging
-grep -qx 'ps --filter volume=boero-acceptance-fixture-postgres-data --filter label=com.docker.compose.service=postgres --format {{.ID}}' "$TRACE"
-! grep -q 'boero-api-postgres-data-staging' "$TRACE"
+grep -qx 'ps --filter volume=bemol-acceptance-fixture-postgres-data --filter label=com.docker.compose.service=postgres --format {{.ID}}' "$TRACE"
+! grep -q 'bemol-api-postgres-data-staging' "$TRACE"
 
 reset_case staging
 printf 'BACKUP_DIR=%s/unused\nBACKUP_RETENTION_DAYS=99999\n' "$test_dir" > "$test_dir/.env.staging"

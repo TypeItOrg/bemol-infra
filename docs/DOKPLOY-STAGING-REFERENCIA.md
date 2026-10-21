@@ -1,4 +1,10 @@
-# Staging: referencia técnica y registro de migración
+# Archivo histórico de staging — NO operativo
+
+> **Histórico del 2026-10-20: NO ejecutar como runbook actual.** Los nombres
+> anteriores se conservan aquí como evidencia de aquella ventana. El código
+> objetivo ya usa `bemol-*`; antes de desplegar seguir
+> [RENOMBRE-BEMOL.md](RENOMBRE-BEMOL.md). Nada de este registro acredita el estado
+> actual del host ni autoriza crear volúmenes vacíos o sustituir datos.
 
 Para aprender el flujo en orden, empezar por la [guía paso a paso](DOKPLOY-STAGING.md).
 El proyecto visible se llama **Bemol**, el environment **staging** y el servicio
@@ -6,13 +12,13 @@ Compose **Staging**. En el historial aparecen sus nombres anteriores, Boero stag
 y Bemol - Staging. Estas etiquetas no cambian el ID, los nombres Docker, los
 repositorios ni los dominios.
 
-**Estado actual de dominios:** el dominio general `staging.typeit.com.ar` se
+**Estado de dominios registrado en aquella ventana:** el dominio general `staging.typeit.com.ar` se
 administra en **Domains**; wildcard y políticas específicas siguen en el archivo
 dinámico. La receta de campos y el resultado del corte están en la guía paso a paso.
 Las versiones y resultados históricos que siguen no constituyen nuevas pruebas.
 
-**Estado: infraestructura migrada y operativa; validación funcional parcial.**
-Esta guía explica cómo funciona y cómo se opera staging desde la migración del
+**Estado registrado: infraestructura migrada y operativa; validación funcional parcial.**
+Este archivo registra cómo funcionaba y se operaba staging durante la migración del
 2026-10-20 en el host `cristinet`. Staging es el único ambiente compartido
 configurado en este repositorio; no hay un despliegue de producción.
 
@@ -24,8 +30,8 @@ En las comprobaciones de la migración se obtuvo HTTP 200 en health
 general/institucional y panel. El sudo temporal fue revocado. Esta evidencia
 corresponde a esa ventana, no a una comprobación nueva al editar esta guía.
 
-Los pipelines de [API](https://github.com/TypeItOrg/boero-api/actions/runs/39491621238)
-y [UI](https://github.com/TypeItOrg/boero-ui/actions/runs/39493133060) terminaron
+Los pipelines de [API](https://github.com/TypeItOrg/bemol-api/actions/runs/39491621238)
+y [UI](https://github.com/TypeItOrg/bemol-ui/actions/runs/39493133060) terminaron
 correctamente y se comprobaron también sus despliegues nativos, salud HTTPS y
 manifests de plataforma contra los SHA publicados. El usuario confirmó ingreso y
 datos. El puerto 3000 está cerrado; el panel sólo se publica por HTTPS. El backup
@@ -166,8 +172,8 @@ opcionales. Sin `--env-file`, Compose puede cargar `.env` para interpolación; e
 no lo inyecta entero en los contenedores. Las variables exportadas en la shell
 también pueden intervenir. Un `.env` genérico no se convierte por su nombre en
 configuración del servidor: cada herramienta carga sus propios archivos. Consultar las guías de
-[API](https://github.com/TypeItOrg/boero-api/tree/staging) y
-[UI](https://github.com/TypeItOrg/boero-ui/blob/staging/docs/DESARROLLO.md) para ejecución nativa.
+[API](https://github.com/TypeItOrg/bemol-api/tree/staging) y
+[UI](https://github.com/TypeItOrg/bemol-ui/blob/staging/docs/DESARROLLO.md) para ejecución nativa.
 
 En staging, Dokploy suministra los valores al ejecutar Compose. Las expresiones
 `${...}` del YAML los resuelven y cada bloque `environment` determina qué recibe
@@ -238,7 +244,7 @@ Renombrar rompe el enlace anterior; no promete alias ni redirecciones histórica
 WebAuthn mantiene RP `staging.typeit.com.ar` y el origen general exacto; no sustituir
 orígenes por un wildcard. No hace falta modificar el código de la aplicación.
 
-## 4. Operación cotidiana
+## 4. Operación cotidiana registrada (histórico; NO ejecutar)
 
 La entrada habitual es el [panel de staging](https://deploy-staging.typeit.com.ar).
 La passkey registrada por el usuario protege su acceso al panel; es independiente
@@ -424,11 +430,11 @@ servicios ni actualiza el checkout operativo del host.
 Actualizar el repositorio operativo del host requiere una entrega autorizada;
 no hace falta recrear contenedores para aplicar esta limpieza sin cambios de Compose.
 
-## Apéndice A. Configuración instalada y reconstrucción
+## Apéndice A. Configuración instalada y reconstrucción históricas (NO operativo)
 
-Referencia técnica para entender o reconstruir lo instalado. **No son tareas
-pendientes ni instrucciones para volver a instalar el servidor operativo.** Para
-la operación habitual, usar la sección de operación cotidiana.
+Referencia histórica para entender lo instalado en aquella ventana. **No son tareas
+pendientes ni instrucciones para reconstruir el servidor actual.** Para operar,
+usar DOKPLOY-STAGING.md y completar primero el corte de RENOMBRE-BEMOL.md.
 
 El servicio **Docker Compose** **Staging** toma este repositorio y el archivo
 `compose.dokploy.staging.yaml`. Éste extiende `compose.yaml`; ambos deben estar en

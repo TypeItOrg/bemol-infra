@@ -6,7 +6,13 @@ volver a migrar: **staging ya existe**. Primero leer; ejecutar cambios sólo con
 autorización y la ventana que correspondan. No hay otro entorno compartido ni
 producción configurada en este repositorio.
 
-La migración operativa se validó el 2026-10-20; la aceptación funcional completa
+**Objetivo preparado, no aplicado:** los identificadores técnicos de esta guía
+son los nuevos `bemol-*`. El entorno real conserva su configuración previa hasta
+completar [el corte coordinado](RENOMBRE-BEMOL.md). No desplegar estos Compose
+sobre datos existentes sin backups verificados y migración: los volúmenes y red
+son externos; una DB ausente detiene PostgreSQL en lugar de crearla vacía.
+
+La migración operativa anterior se validó el 2026-10-20; la aceptación funcional completa
 sigue parcial. Los resultados, límites y datos técnicos se conservan en la
 [referencia de staging](DOKPLOY-STAGING-REFERENCIA.md). No confundir ese historial
 con una comprobación del servidor en cada edición de este documento.
@@ -42,11 +48,13 @@ su `composeId`**. No lo genera GitHub, el YAML ni quien elige el nombre.
 |---|---|---|
 | Name: `Staging` | Nombre visible del servicio en el proyecto Bemol | Sí; lápiz junto al título → Name → Update |
 | `composeId` | Identificador interno que usa la API | No; Dokploy lo asigna al crear el recurso |
-| `boero-dokploy-staging-2neeqh` | Nombre técnico del proyecto Compose (`appName`) | Se conserva para no alterar la identidad Docker |
+| `appName` del recurso | Nombre técnico del proyecto Compose | Inventariar; migrar al prefijo `bemol-` durante el corte aprobado, no inventar el sufijo |
 
 El nombre visible se puede cambiar sin deploy; **no sustituye el `composeId`** ni
 exige cambiar los secrets de Actions. El proyecto padre se llama Bemol; el environment es staging.
-No renombrar contenedores, volúmenes ni `appName` para cambiar una etiqueta visual.
+El renombre técnico requiere el corte coordinado de
+[RENOMBRE-BEMOL.md](RENOMBRE-BEMOL.md); no se realiza desde esta guía ni creando
+recursos vacíos.
 
 ## Paso 2. Entender qué repositorio lee Dokploy
 
@@ -55,7 +63,7 @@ En **General → Provider**, comprobar, sin reemplazar la configuración existen
 | Campo | Valor |
 |---|---|
 | Provider | Git |
-| Repository URL | `https://github.com/TypeItOrg/boero-infra.git` |
+| Repository URL | `https://github.com/TypeItOrg/bemol-infra.git` |
 | Branch | `main` |
 | Compose Path | `./compose.dokploy.staging.yaml` |
 | Autodeploy | Desactivado |
@@ -72,8 +80,9 @@ revisar la receta, pero no muestra una prueba de salud ni garantiza qué se ejec
 
 1. Abrir **Environment** del Compose **Staging**.
 2. Comparar los nombres con [.env.dokploy.staging.example](../.env.dokploy.staging.example).
-3. Conservar DB, claves de autenticación, correo, storage y WebAuthn existentes:
-   los ejemplos no son valores para reemplazarlos.
+3. Conservar claves de autenticación, correo y WebAuthn existentes. Cambiar nombres
+   DB/rol y destinos de storage sólo después de copiar/migrar y verificar sus datos;
+   los ejemplos no son valores para sobrescribir la configuración privada.
 4. Mantener `UI_VERSION=staging` y `API_VERSION=staging` para el flujo normal.
 
 Guardar deja preparada la configuración del próximo deploy; no cambia el entorno
@@ -83,10 +92,10 @@ Los `.env` locales de API/UI no se copian al servidor.
 
 ## Paso 4. Reconocer los datos persistentes y el File Mount
 
-Antes de cualquier reconstrucción autorizada, comprobar los cinco volúmenes
-externos: `boero-api-postgres-data-staging`, `boero-api-redis-data-staging`,
-`boero-api-enrollment-storage-staging`, `boero-api-logs-staging` y
-`boero-ui-next-cache-staging`. Si falta uno, **detenerse**, no crear una base vacía.
+Después del corte autorizado, comprobar los cinco volúmenes externos migrados:
+`bemol-api-postgres-data-staging`, `bemol-api-redis-data-staging`,
+`bemol-api-enrollment-storage-staging`, `bemol-api-logs-staging` y
+`bemol-ui-next-cache-staging`. Si falta uno, **detenerse**, no crear una base vacía.
 
 El PostgreSQL usa además un **File Mount** gestionado por Dokploy:
 
@@ -98,7 +107,7 @@ El PostgreSQL usa además un **File Mount** gestionado por Dokploy:
 
 No depende del directorio Git descartable. Si cambia su contenido versionado,
 actualizar también el File Mount antes de un deploy autorizado. Sólo UI pertenece
-además a `dokploy-network`, con alias `boero-ui-staging`; API/DB/Redis no se publican
+además a `dokploy-network`, con alias `bemol-ui-staging`; API/DB/Redis no se publican
 por esa red. El auxiliar `api-storage-init` prepara permisos y luego termina.
 
 ## Paso 5. Entender dónde se definen los dominios
@@ -136,7 +145,7 @@ En el servicio **Staging** del proyecto **Bemol**, abrir **Domains → Add Domai
 | HTTPS | Activado |
 | Certificate Provider | Custom |
 | Custom Certificate Resolver | `cloudflare-staging` |
-| Middlewares, en este orden | `boero-cloudflare-only@file`, `boero-common@file`, `boero-rate-cloudflare@file`, `boero-flight-cloudflare@file`, `boero-flight-host@file` |
+| Middlewares, en este orden | `bemol-cloudflare-only@file`, `bemol-common@file`, `bemol-rate-cloudflare@file`, `bemol-flight-cloudflare@file`, `bemol-flight-host@file` |
 
 Guardar con **Create** prepara el dominio. **General → Deploy** aplica las etiquetas
 nativas a UI y puede recrear contenedores: acordar el corte antes. No añadir entradas
@@ -174,7 +183,7 @@ Dentro de la configuración dinámica:
 
 - `routers` decide qué hostname/ruta atiende cada regla de archivo; el router base
   del dominio general ya no está ahí, lo genera Domains.
-- `services.boero-staging` reenvía a `http://boero-ui-staging:3000`.
+- `services.bemol-staging` reenvía a `http://bemol-ui-staging:3000`.
 - `middlewares` aplica headers, gzip, rate limiting y límites de cuerpo/concurrencia.
 - `tls` enlaza los routers al resolver de certificados `cloudflare-staging`.
 
@@ -239,7 +248,7 @@ obtenerlo desde esta versión del panel:
    `/dashboard/project/<projectId>/environment/<environmentId>/services/compose/<composeId>`.
 3. Copiar únicamente el segmento que sigue a `/services/compose/`: ése es el ID.
    También lo devuelve la API al consultar el recurso; no confundirlo con `appName`.
-4. En **cada** repositorio GitHub (`boero-api` y `boero-ui`), ir a **Settings →
+4. En **cada** repositorio GitHub (`bemol-api` y `bemol-ui`), ir a **Settings →
    Environments → staging → Environment secrets**.
 5. Comprobar los tres valores existentes de la tabla. No es necesario regenerar
    la API key ni cambiar un secret que ya apunta al servicio correcto.
@@ -269,7 +278,8 @@ ni colocarla en URLs; mantener su revocación independiente de otras claves.
    `x-api-key` y un cuerpo que contiene `composeId: DOKPLOY_STAGING_COMPOSE_ID`.
 6. Dokploy recibe la solicitud, toma infra/main + Environment, incorpora las
    etiquetas de los dominios nativos configurados y descarga las imágenes.
-7. Compose recrea lo que cambió, reutilizando las redes y volúmenes existentes.
+7. Compose recrea lo que cambió, reutilizando las redes y volúmenes Bemol ya migrados.
+   Durante la transición no desplegar hasta completar RENOMBRE-BEMOL.md.
 8. Revisar **Deployments** en Dokploy y luego **Containers**, logs y salud HTTPS.
 
 La respuesta HTTP del paso 5 sólo confirma la solicitud asíncrona. Un check verde
@@ -305,7 +315,7 @@ migraciones Flyway. No restaurar un backup encima de datos nuevos por iniciativa
 - **Rebuild:** no es necesario en el flujo normal de imágenes fabricadas en Actions.
 - **Backups / Volume Backups:** que existan pestañas no significa que haya una
   política configurada allí. El backup diario PostgreSQL sigue siendo independiente:
-  systemd ejecuta `make backup-db ENV=staging` en `/opt/boero-infra`.
+  systemd ejecuta `make backup-db ENV=staging` en `/opt/bemol-infra`.
 
 El backup valida el dump antes de rotar y conserva la selección del volumen de
 staging. No respalda adjuntos ni sustituye una copia fuera del host. Consultar
@@ -319,10 +329,9 @@ Deployments/Containers/Logs. No publicar logs crudos con valores privados.
 ## Nombres visibles y nombres técnicos
 
 El proyecto se llama **Bemol**, su environment **staging** y el servicio Compose
-**Staging**. Se verificaron en el panel durante la preparación del dominio nativo.
-El nombre intermedio Bemol - Staging fue sólo una etiqueta visible. Se conserva
-el mismo ID de Compose y el `appName` técnico `boero-dokploy-staging-2neeqh`.
-Los nombres de repositorios, imágenes, volúmenes y dominios no se renombraron.
+**Staging**. El código objetivo usa repositorios/imágenes/recursos `bemol-*`.
+Esto no acredita su existencia remota ni modifica el `composeId`: inventariar el
+recurso real y acordar su renombre técnico antes de habilitar el siguiente deploy.
 
 ## Para profundizar
 
@@ -331,12 +340,15 @@ Los nombres de repositorios, imágenes, volúmenes y dominios no se renombraron.
 - [API Compose y su campo composeId](https://docs.dokploy.com/docs/api/compose).
 - [ACME y renovación de certificados en Traefik](https://doc.traefik.io/traefik/reference/install-configuration/tls/certificate-resolvers/acme/).
 
-## Resultado: dominio general nativo del 2026-10-20
+## Registro histórico: dominio general nativo del 2026-10-20
+
+Los nombres siguientes registran aquella ventana, no son identificadores objetivo
+ni evidencia de que el renombre técnico Bemol se haya aplicado.
 
 **Aplicado y verificado.** `staging.typeit.com.ar` aparece en Domains del servicio
 Staging, con HTTPS, resolver `cloudflare-staging` y los cinco middlewares de la tabla.
 Se comprobó el despliegue nativo **Done**, los routers HTTP/HTTPS `@docker` habilitados
-y la ausencia de `boero-staging@file`: la entrada del panel atiende realmente el
+y la ausencia de middlewares heredados según el inventario de transición: la entrada del panel atiende realmente el
 tráfico general, no es decorativa. Wildcard y rutas específicas permanecen `@file`.
 
 Para no cambiar código durante el corte se utilizó un patch temporal del Compose
@@ -359,11 +371,11 @@ No se hicieron pruebas funcionales con registros de negocio ni una restauración
 
 El archivo dinámico se aplicó desde el panel y su configuración queda versionada
 en este repositorio. Publicar infra en Git no sincroniza ese archivo automáticamente
-ni actualiza `/opt/boero-infra`: el checkout operativo y los recursos retenidos
+ni actualiza el checkout operativo del host: ese checkout y los recursos retenidos
 del host no se modificaron con esta limpieza.
 
 ## Nombre de la aplicación
 
-La aplicación se llama **Bemol**. Los identificadores operativos anteriores se
-conservan cuando son necesarios para acceder a recursos existentes. Consultar
-[la transición de nombre](RENOMBRE-BEMOL.md).
+La aplicación se llama **Bemol**. Los nombres anteriores no se conservan como
+contrato permanente: su retiro requiere migración de recursos/datos y un corte
+coordinado. Consultar [la transición de nombre](RENOMBRE-BEMOL.md).

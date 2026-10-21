@@ -27,9 +27,9 @@ import urllib.request
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
-LABEL = "io.boero.acceptance.namespace"
-OWNER = "io.boero.acceptance.owner"
-SOURCE = "io.boero.acceptance.source"
+LABEL = "io.bemol.acceptance.namespace"
+OWNER = "io.bemol.acceptance.owner"
+SOURCE = "io.bemol.acceptance.source"
 DOCKER = ["docker", "--context", "default"]
 RESOURCE_KEYS = ("ui-next-cache", "postgres-data", "redis-data", "api-logs", "api-storage", "mailpit-data")
 SERVICES = ("ui", "api", "postgres", "redis", "mailpit")
@@ -156,7 +156,8 @@ def load_state(path):
     if not path.is_file() or path.stat().st_uid != os.getuid() or path.stat().st_mode & 0o077:
         raise RuntimeFailure("Private state is missing, not owned by caller, or readable by others")
     state = json.loads(path.read_text())
-    if not re.fullmatch(r"boero-acceptance-[a-f0-9]{20}", state.get("namespace", "")):
+    # Historical states remain recoverable for ownership-checked cleanup.
+    if not re.fullmatch(r"(?:bemol|boero)-acceptance-[a-f0-9]{20}", state.get("namespace", "")):
         raise RuntimeFailure("Invalid acceptance namespace")
     if not re.fullmatch(r"[a-f0-9]{32}", state.get("owner", "")):
         raise RuntimeFailure("Invalid acceptance ownership marker")
@@ -197,7 +198,8 @@ def owned(state, kind, identifier):
         name = data["Name"]
         labels = data.get("Labels", {})
         captured = data.get("Id", name)
-    if not name.startswith(state["namespace"] + "-") or labels.get(LABEL) != state["namespace"] or labels.get(OWNER) != state["owner"]:
+    label, owner = ownership_labels(state)
+    if not name.startswith(state["namespace"] + "-") or labels.get(label) != state["namespace"] or labels.get(owner) != state["owner"]:
         raise RuntimeFailure(f"Refusing non-owned {kind}: {name}")
     baseline = state["baseline"][{"container": "containers", "volume": "volumes", "network": "networks"}[kind]]
     if captured in baseline or any(captured.startswith(old) for old in baseline if kind == "network"):
@@ -205,12 +207,19 @@ def owned(state, kind, identifier):
     return data
 
 
+def ownership_labels(state):
+    # Derive the historical label pair from validated state; never broaden ownership.
+    product = state["namespace"].split("-acceptance-", 1)[0]
+    return f"io.{product}.acceptance.namespace", f"io.{product}.acceptance.owner"
+
+
 def capture_owned(state, state_path):
+    label, owner = ownership_labels(state)
     records = {}
     for kind, args in (("containers", ("ps", "-aq")), ("volumes", ("volume", "ls", "-q")),
                        ("networks", ("network", "ls", "-q"))):
-        found = docker(*args, "--filter", f"label={LABEL}={state['namespace']}",
-                       "--filter", f"label={OWNER}={state['owner']}").stdout.split()
+        found = docker(*args, "--filter", f"label={label}={state['namespace']}",
+                       "--filter", f"label={owner}={state['owner']}").stdout.split()
         singular = {"containers": "container", "volumes": "volume", "networks": "network"}[kind]
         records[kind] = []
         for identifier in found:
@@ -288,11 +297,11 @@ def build_image(state, app, path, artifacts):
     if provided:
         info = docker_json("image", "inspect", image)[0]
         labels = info.get("Config", {}).get("Labels", {})
-        if labels.get(SOURCE) != fingerprint or labels.get("io.boero.acceptance.app") != app:
+        if labels.get(SOURCE) != fingerprint or labels.get("io.bemol.acceptance.app") != app:
             raise RuntimeFailure(f"Explicit {app} image lacks the current local source fingerprint")
     else:
         result = docker("build", "--target", "prod", "--label", f"{SOURCE}={fingerprint}",
-                        "--label", f"io.boero.acceptance.app={app}", "--label", f"{LABEL}={state['namespace']}",
+                        "--label", f"io.bemol.acceptance.app={app}", "--label", f"{LABEL}={state['namespace']}",
                         "--tag", image, path, timeout=1800, check=False)
         (artifacts / f"build-{app}.log").write_text(redact(result.stdout + result.stderr))
         if result.returncode:
@@ -312,8 +321,8 @@ def make_stack(state, key, domain, private):
     values = {
         # The generated third overlay supplies exact verified local images. Base placeholders
         # satisfy required interpolation even for a provided digest or implicit latest tag.
-        "UI_IMAGE": "boero-acceptance-unused-ui", "UI_VERSION": "local",
-        "API_IMAGE": "boero-acceptance-unused-api", "API_VERSION": "local",
+        "UI_IMAGE": "bemol-acceptance-unused-ui", "UI_VERSION": "local",
+        "API_IMAGE": "bemol-acceptance-unused-api", "API_VERSION": "local",
         "AUTH_COOKIE_SECURE": "true", "DB_NAME": f"acceptance_{key}", "DB_USER": "acceptance",
         "DB_PASSWORD": secrets.token_urlsafe(32), "JWT_SECRET": secrets.token_urlsafe(48),
         "REFRESH_REPLAY_ENCRYPTION_KEY": base64.b64encode(secrets.token_bytes(32)).decode(), "REFRESH_REPLAY_TTL": "5s",
@@ -479,7 +488,7 @@ def start(args):
     if not artifacts.is_relative_to(ROOT / "build/verification"):
         raise RuntimeFailure("Artifacts must be in ignored infra build/verification, never a private env directory")
     artifacts.mkdir(parents=True, exist_ok=True)
-    namespace = "boero-acceptance-" + uuid.uuid4().hex[:20]
+    namespace = "bemol-acceptance-" + uuid.uuid4().hex[:20]
     daemon = require_local_daemon()
     require_new_namespace(namespace)
     private = Path(tempfile.mkdtemp(prefix=namespace + "-", dir="/tmp"))
@@ -495,12 +504,12 @@ def start(args):
     private_json(private / "ownership.json", {"namespace": namespace, "owner": state["owner"]})
     private_json(state_path, state)
     try:
-        repos = {"api": Path(os.environ.get("API_REPO", ROOT.parent / "boero-api")).resolve(),
-                 "ui": Path(os.environ.get("UI_REPO", ROOT.parent / "boero-ui")).resolve()}
+        repos = {"api": Path(os.environ.get("API_REPO", ROOT.parent / "bemol-api")).resolve(),
+                 "ui": Path(os.environ.get("UI_REPO", ROOT.parent / "bemol-ui")).resolve()}
         for app, repo in repos.items():
             state["images"][app] = build_image(state, app, repo, artifacts)
             private_json(state_path, state)
-        run(["openssl", "req", "-x509", "-nodes", "-newkey", "rsa:2048", "-days", "2", "-subj", "/CN=boero-acceptance-local",
+        run(["openssl", "req", "-x509", "-nodes", "-newkey", "rsa:2048", "-days", "2", "-subj", "/CN=bemol-acceptance-local",
              "-addext", "subjectAltName=DNS:testing.typeit.com.ar,DNS:*.testing.typeit.com.ar,DNS:staging.typeit.com.ar,DNS:*.staging.typeit.com.ar",
              "-keyout", private / "key.pem", "-out", private / "cert.pem"], timeout=30)
         (private / "key.pem").chmod(0o600)

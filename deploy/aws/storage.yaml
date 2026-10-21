@@ -6,7 +6,7 @@ Parameters:
     Description: Globally unique name; use a different bucket per environment
   ObjectPrefix:
     Type: String
-    Default: boero/
+    Default: bemol/
     AllowedPattern: '[A-Za-z0-9][A-Za-z0-9/_-]*/'
     Description: Must match STORAGE_S3_PREFIX, including its trailing slash
 Resources:

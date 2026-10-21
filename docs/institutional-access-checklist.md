@@ -47,8 +47,11 @@ fallida, sin ejecutar o perteneciente a otro estado del código impide el cierre
 
 ## Ejecución y cierre
 
-Desde `boero-infra`: `make verify-institutional-access`. Los repositorios hermanos
-pueden indicarse con `API_REPO` y `UI_REPO`. El comando no lee secretos de ambientes
+Desde `bemol-infra`: `make verify-institutional-access`. Los defaults buscan los
+repositorios hermanos `bemol-api` y `bemol-ui`; ubicaciones distintas se indican
+con `API_REPO` y `UI_REPO`. Para checkouts aún no movidos, usar las rutas reales
+explícitas según [RENOMBRE-BEMOL.md](RENOMBRE-BEMOL.md), no renombrar directorios
+desde el harness. El comando no lee secretos de ambientes
 existentes ni reutiliza sus bases/volúmenes; sus recursos usan un namespace de aceptación.
 
 La evidencia se escribe en `build/verification/institutional-access/`, ignorada por
@@ -109,11 +112,15 @@ ese cierre.
 Las credenciales, correo completo, cookies y logs crudos permanecen en directorios
 privados temporales, fuera de la evidencia. No se generan trazas de red. Si Docker
 impide el cleanup, el comando falla y conserva el archivo de ownership privado
-`/tmp/boero-acceptance-state-<run-id>.json`; se puede repetir el cleanup seguro con:
+`/tmp/bemol-acceptance-state-<run-id>.json`; se puede repetir el cleanup seguro con:
 
 ```sh
-python3 scripts/verification/runtime.py stop --state /tmp/boero-acceptance-state-<run-id>.json
+python3 scripts/verification/runtime.py stop --state /tmp/bemol-acceptance-state-<run-id>.json
 ```
+
+Los estados anteriores al renombre siguen admitidos para recuperar su cleanup:
+usar su ruta original, sin renombrar el archivo, namespace ni labels de recursos.
+El driver conserva las comprobaciones de ownership y nunca limpia recursos ajenos.
 
 No usar `docker system prune`, `compose down -v` sobre proyectos compartidos ni
 borrar recursos manualmente para hacer pasar el gate. Las imágenes locales de

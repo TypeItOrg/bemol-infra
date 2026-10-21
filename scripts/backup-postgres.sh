@@ -22,7 +22,7 @@ read_env_value() {
 
 backup_root="${BACKUP_DIR:-$(read_env_value BACKUP_DIR)}"
 retention_days="${BACKUP_RETENTION_DAYS:-$(read_env_value BACKUP_RETENTION_DAYS)}"
-backup_root="${backup_root:-/var/backups/boero}"
+backup_root="${backup_root:-/var/backups/bemol}"
 retention_days="${retention_days:-7}"
 
 case "$backup_root" in
@@ -36,7 +36,7 @@ case "$retention_days" in
 esac
 
 # The override lets disposable acceptance fixtures use only their own volume.
-postgres_volume="${BACKUP_POSTGRES_VOLUME:-boero-api-postgres-data-staging}"
+postgres_volume="${BACKUP_POSTGRES_VOLUME:-bemol-api-postgres-data-staging}"
 postgres_containers="$(docker ps \
   --filter "volume=$postgres_volume" \
   --filter label=com.docker.compose.service=postgres \
@@ -50,8 +50,8 @@ postgres_container="$1"
 
 backup_dir="$backup_root/$environment"
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
-final_file="$backup_dir/boero-$environment-$timestamp.dump"
-temporary_file="$backup_dir/.boero-$environment-$timestamp.dump.tmp"
+final_file="$backup_dir/bemol-$environment-$timestamp.dump"
+temporary_file="$backup_dir/.bemol-$environment-$timestamp.dump.tmp"
 
 umask 077
 mkdir -p "$backup_dir"
@@ -72,6 +72,6 @@ mv "$temporary_file" "$final_file"
 trap - EXIT HUP INT TERM
 
 # Retention only runs after the new archive has passed pg_restore validation.
-find "$backup_dir" -type f -name "boero-$environment-*.dump" -mtime "+$retention_days" -delete
+find "$backup_dir" -type f -name "bemol-$environment-*.dump" -mtime "+$retention_days" -delete
 
 echo "Validated PostgreSQL backup created at $final_file"

@@ -1,9 +1,11 @@
 # Compose entrypoint for Dokploy; deploy this file, not the base on its own.
 # Supply both *_VERSION variables: the extended base requires them before merging.
+name: bemol-staging
+
 services:
   ui:
     # Dokploy rewrites YAML and drops !reset; define UI without inherited ports.
-    image: ${UI_IMAGE:-ghcr.io/typeitorg/boero-ui}:${UI_VERSION:-staging}
+    image: ${UI_IMAGE:-ghcr.io/typeitorg/bemol-ui}:${UI_VERSION:-staging}
     pull_policy: always
     init: true
     environment:
@@ -40,7 +42,7 @@ services:
       default:
       dokploy-network:
         aliases:
-          - boero-ui-staging
+          - bemol-ui-staging
     labels:
       # Dokploy enables routing here when a native UI domain is configured.
       traefik.enable: "false"
@@ -49,7 +51,7 @@ services:
     extends:
       file: compose.yaml
       service: api
-    image: &api-image ${API_IMAGE:-ghcr.io/typeitorg/boero-api}:${API_VERSION:-staging}
+    image: &api-image ${API_IMAGE:-ghcr.io/typeitorg/bemol-api}:${API_VERSION:-staging}
     environment:
       SPRING_PROFILES_ACTIVE: staging
       AUTO_LOGIN_ENABLED: ${AUTO_LOGIN_ENABLED:-false}
@@ -99,6 +101,9 @@ services:
     extends:
       file: compose.yaml
       service: postgres
+    environment:
+      # A renamed DB_NAME must never silently create an empty shared database.
+      DB_REQUIRE_EXISTING: "true"
     volumes:
       # Dokploy File Mount, not a bind into its disposable Git checkout.
       - type: bind
@@ -113,23 +118,23 @@ services:
 volumes:
   ui-next-cache:
     external: true
-    name: boero-ui-next-cache-staging
+    name: bemol-ui-next-cache-staging
   postgres-data:
     external: true
-    name: boero-api-postgres-data-staging
+    name: bemol-api-postgres-data-staging
   redis-data:
     external: true
-    name: boero-api-redis-data-staging
+    name: bemol-api-redis-data-staging
   api-logs:
     external: true
-    name: boero-api-logs-staging
+    name: bemol-api-logs-staging
   api-storage:
     external: true
-    name: boero-api-enrollment-storage-staging
+    name: bemol-api-enrollment-storage-staging
 
 networks:
   default:
     external: true
-    name: boero-network-staging
+    name: bemol-network-staging
   dokploy-network:
     external: true

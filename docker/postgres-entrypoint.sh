@@ -23,6 +23,12 @@ done
 db_exists="$(psql -U "$POSTGRES_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$app_db'")"
 
 if [ "$db_exists" != "1" ]; then
+  if [ "${DB_REQUIRE_EXISTING:-false}" = "true" ]; then
+    echo "Configured application database is missing; restore or rename it before deployment" >&2
+    cleanup
+    exit 1
+  fi
+
   psql -U "$POSTGRES_USER" -d postgres -c "CREATE DATABASE \"$app_db\""
 fi
 

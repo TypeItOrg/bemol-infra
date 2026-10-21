@@ -4,84 +4,84 @@
 # Keep wildcard/specialized routers and shared middlewares here.
 http:
   routers:
-    boero-staging-institutions:
+    bemol-staging-institutions:
       entryPoints: [websecure]
       rule: HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`)
       priority: 100
-      service: boero-staging
-      middlewares: [boero-direct, boero-common, boero-rate-direct, boero-flight-direct, boero-flight-host]
+      service: bemol-staging
+      middlewares: [bemol-direct, bemol-common, bemol-rate-direct, bemol-flight-direct, bemol-flight-host]
       tls: &staging-tls
         certResolver: cloudflare-staging
         domains:
           - main: staging.typeit.com.ar
             sans: ["*.staging.typeit.com.ar"]
 
-    boero-staging-write:
+    bemol-staging-write:
       entryPoints: [websecure]
       rule: Host(`staging.typeit.com.ar`) && (Method(`POST`) || Method(`PUT`) || Method(`PATCH`))
       priority: 200
-      service: boero-staging
-      middlewares: [boero-cloudflare-only, boero-common, boero-rate-cloudflare, boero-flight-cloudflare, boero-flight-host, boero-body]
+      service: bemol-staging
+      middlewares: [bemol-cloudflare-only, bemol-common, bemol-rate-cloudflare, bemol-flight-cloudflare, bemol-flight-host, bemol-body]
       tls: *staging-tls
 
-    boero-staging-institutions-write:
+    bemol-staging-institutions-write:
       entryPoints: [websecure]
       rule: HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`) && (Method(`POST`) || Method(`PUT`) || Method(`PATCH`))
       priority: 200
-      service: boero-staging
-      middlewares: [boero-direct, boero-common, boero-rate-direct, boero-flight-direct, boero-flight-host, boero-body]
+      service: bemol-staging
+      middlewares: [bemol-direct, bemol-common, bemol-rate-direct, bemol-flight-direct, bemol-flight-host, bemol-body]
       tls: *staging-tls
 
-    boero-staging-auth:
+    bemol-staging-auth:
       entryPoints: [websecure]
       rule: Host(`staging.typeit.com.ar`) && Method(`POST`) && PathRegexp(`^/(auth/(login|register|password-recovery(/reset)?)|admin/auth/login)/?$`)
       priority: 300
-      service: boero-staging
-      middlewares: [boero-cloudflare-only, boero-common, boero-rate-cloudflare, boero-auth-cloudflare, boero-flight-cloudflare, boero-flight-host, boero-body]
+      service: bemol-staging
+      middlewares: [bemol-cloudflare-only, bemol-common, bemol-rate-cloudflare, bemol-auth-cloudflare, bemol-flight-cloudflare, bemol-flight-host, bemol-body]
       tls: *staging-tls
 
-    boero-staging-institutions-auth:
+    bemol-staging-institutions-auth:
       entryPoints: [websecure]
       rule: HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`) && Method(`POST`) && PathRegexp(`^/(auth/(login|register|password-recovery(/reset)?)|admin/auth/login)/?$`)
       priority: 300
-      service: boero-staging
-      middlewares: [boero-direct, boero-common, boero-rate-direct, boero-auth-direct, boero-flight-direct, boero-flight-host, boero-body]
+      service: bemol-staging
+      middlewares: [bemol-direct, bemol-common, bemol-rate-direct, bemol-auth-direct, bemol-flight-direct, bemol-flight-host, bemol-body]
       tls: *staging-tls
 
-    boero-staging-private-paths:
+    bemol-staging-private-paths:
       entryPoints: [websecure]
       rule: (Host(`staging.typeit.com.ar`) || HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`)) && (PathPrefix(`/actuator`) || Path(`/api/v1`) || PathPrefix(`/api/v1/`))
       priority: 400
       service: noop@internal
-      middlewares: [boero-headers, boero-deny]
+      middlewares: [bemol-headers, bemol-deny]
       tls: *staging-tls
 
-    boero-staging-www:
+    bemol-staging-www:
       entryPoints: [websecure]
       rule: Host(`www.staging.typeit.com.ar`)
       priority: 500
       service: noop@internal
-      middlewares: [boero-headers, boero-canonical]
+      middlewares: [bemol-headers, bemol-canonical]
       tls: *staging-tls
 
-    boero-staging-http:
+    bemol-staging-http:
       entryPoints: [web]
       rule: HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.staging\.typeit\.com\.ar$`)
       service: noop@internal
-      middlewares: [boero-canonical, boero-https]
+      middlewares: [bemol-canonical, bemol-https]
 
   services:
-    boero-staging:
+    bemol-staging:
       loadBalancer:
         servers:
-          - url: http://boero-ui-staging:3000
+          - url: http://bemol-ui-staging:3000
         passHostHeader: true
-        serversTransport: boero-staging
+        serversTransport: bemol-staging
         responseForwarding:
           flushInterval: -1ms
 
   serversTransports:
-    boero-staging:
+    bemol-staging:
       maxIdleConnsPerHost: 32
       forwardingTimeouts:
         dialTimeout: 5s
@@ -89,11 +89,11 @@ http:
         idleConnTimeout: 30s
 
   middlewares:
-    boero-common:
+    bemol-common:
       chain:
-        middlewares: [boero-headers, boero-compress]
+        middlewares: [bemol-headers, bemol-compress]
 
-    boero-headers:
+    bemol-headers:
       headers:
         frameDeny: false
         customFrameOptionsValue: SAMEORIGIN
@@ -104,7 +104,7 @@ http:
         contentSecurityPolicy: "base-uri 'self'; frame-ancestors 'self'; object-src 'none'"
         permissionsPolicy: "camera=(), microphone=(), geolocation=()"
 
-    boero-compress:
+    bemol-compress:
       compress:
         encodings: [gzip]
         minResponseBodyBytes: 1024
@@ -122,7 +122,7 @@ http:
           - image/svg+xml
 
     # Direct institutional traffic must never supply its own trusted CF headers.
-    boero-direct:
+    bemol-direct:
       headers:
         customRequestHeaders:
           CF-Connecting-IP: ""
@@ -131,7 +131,7 @@ http:
 
     # Only the generic hostname is proxied by CF. Check the TCP peer BEFORE
     # interpreting CF-Connecting-IP; these ranges do not authenticate our zone.
-    boero-cloudflare-only:
+    bemol-cloudflare-only:
       ipAllowList:
         sourceRange:
           - 103.21.244.0/22
@@ -157,7 +157,7 @@ http:
           - 2a06:98c0::/29
           - 2c0f:f248::/32
 
-    boero-rate-direct:
+    bemol-rate-direct:
       rateLimit: &direct-rate
         average: 20
         period: 1s
@@ -166,20 +166,20 @@ http:
           ipStrategy:
             depth: 0
 
-    boero-rate-cloudflare:
+    bemol-rate-cloudflare:
       rateLimit:
         <<: *direct-rate
         sourceCriterion: &cloudflare-source
           requestHeaderName: CF-Connecting-IP
 
-    boero-auth-direct:
+    bemol-auth-direct:
       rateLimit:
         <<: *direct-rate
         average: 30
         period: 1m
         burst: 20
 
-    boero-auth-cloudflare:
+    bemol-auth-cloudflare:
       rateLimit:
         average: 30
         period: 1m
@@ -188,19 +188,19 @@ http:
 
     # Requests in flight, not Nginx TCP connections. Buckets are per router and
     # Traefik instance; 200/hostname is NOT the former shared 200/server bound.
-    boero-flight-direct:
+    bemol-flight-direct:
       inFlightReq:
         amount: 50
         sourceCriterion:
           ipStrategy:
             depth: 0
 
-    boero-flight-cloudflare:
+    bemol-flight-cloudflare:
       inFlightReq:
         amount: 50
         sourceCriterion: *cloudflare-source
 
-    boero-flight-host:
+    bemol-flight-host:
       inFlightReq:
         amount: 200
         sourceCriterion:
@@ -208,24 +208,24 @@ http:
 
     # Only write routers use buffering: GET downloads/SSE remain streaming.
     # Traefik buffers write responses too, even with maxResponseBodyBytes=0.
-    boero-body:
+    bemol-body:
       buffering:
         maxRequestBodyBytes: 33554432
         memRequestBodyBytes: 1048576
 
     # Public denied paths return 403 instead of the former Nginx 404, never UI/API.
-    boero-deny:
+    bemol-deny:
       ipAllowList:
         # The unspecified address cannot be a connected TCP peer. Not /0.
         sourceRange: [0.0.0.0/32]
 
-    boero-canonical:
+    bemol-canonical:
       redirectRegex:
         regex: '^https?://www\.staging\.typeit\.com\.ar(:[0-9]+)?/(.*)'
         replacement: 'https://staging.typeit.com.ar/${2}'
         permanent: true
 
-    boero-https:
+    bemol-https:
       redirectScheme:
         scheme: https
         permanent: true

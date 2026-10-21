@@ -10,9 +10,9 @@ endif
 help:
 	@printf '%s\n' 'Deploy, variables, estado y logs: usar Dokploy (docs/DOKPLOY-STAGING.md).' 'make backup-db: backup PostgreSQL de staging.' 'make test: comprobaciones de infraestructura sin desplegar.'
 
-# Keep the existing command and lock used by boero-backup@staging.service.
+# Disable the previous timer before switching to bemol-backup@staging.service.
 backup-db:
-	flock /tmp/boero-infra-staging.lock ./scripts/backup-postgres.sh staging
+	flock /tmp/bemol-infra-staging.lock ./scripts/backup-postgres.sh staging
 
 verify-institutional-access:
 	./scripts/verify-institutional-access.sh
