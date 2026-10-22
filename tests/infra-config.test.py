@@ -203,7 +203,11 @@ class InfraConfigTests(unittest.TestCase):
         self.assertEqual(wrapper["source"], str(INFRA / "docker/postgres-entrypoint.sh"))
         self.assertEqual(wrapper["type"], "bind")
         self.assertTrue(wrapper["read_only"])
-        self.assertFalse(wrapper["bind"].get("create_host_path", False))
+        # Compose may omit false flags; also verify the explicit source contract.
+        self.assertRegex((INFRA / "compose.yaml").read_text(),
+                         r"target: /usr/local/bin/postgres-entrypoint\.sh\s+"
+                         r"read_only: true\s+bind:\s+create_host_path: false")
+        self.assertFalse(wrapper.get("bind", {}).get("create_host_path", False))
         data = next(mount for mount in mounts if mount["target"] == "/var/lib/postgresql")
         self.assertEqual((data["type"], data["source"]), ("volume", "postgres-data"))
 
