@@ -30,18 +30,21 @@
   mejorando la organización y facilitando la gestión cotidiana.
 </p>
 
+## Ramas y entornos
+
+- `main` corresponde a producción; esta actualización no la aprovisiona ni la despliega.
+- `staging` versiona la configuración instalada en el VPS de staging.
+- Para operar staging, usa un checkout de la rama `staging`; no despliegues desde `main`.
+
 ## Operación de staging
 
 - [Despliegues por SSH, variables y datos](docs/STAGING.md).
-- [Reglas de Traefik por responsabilidad y transición a archivos propios](deploy/traefik/README.md).
+- [Reglas públicas de Traefik](deploy/traefik/traefik-staging.yaml) y [configuración estática de referencia](deploy/traefik/traefik-static.staging.example.yaml).
 - [Compose base de la aplicación](compose.yaml) y [diferencias de staging](compose.staging.yaml).
-- [Compose del proxy Traefik independiente](compose.traefik.staging.yaml).
+- [Compose del proxy Traefik independiente](compose.proxy.yaml).
 
-Staging combina `compose.yaml` y `compose.staging.yaml`; el archivo de producción
-se incorporará cuando se prepare ese entorno.
-
-El dominio base y el subdominio de staging se definen en
-[deploy/staging.env](deploy/staging.env); el hostname de staging se deriva de ambos.
-`make prepare-staging` genera la configuración y verifica los volúmenes existentes.
-Después, `make deploy-staging` descarga las imágenes y actualiza los contenedores.
-`make render-staging-config` permite generar sólo las reglas y el ejemplo de entorno.
+`make deploy-staging` valida el entorno privado, descarga las imágenes de aplicación,
+crea y valida un backup de PostgreSQL y actualiza los contenedores. Los cinco
+volúmenes de datos existentes son externos y no se crean implícitamente.
+Traefik usa archivos privados de `/etc/bemol/traefik`, sin socket de Docker;
+su dashboard requiere autenticación propia.

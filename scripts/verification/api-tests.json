@@ -298,42 +298,42 @@
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaInstitutionalHostIsolationTest",
-        "methodName": "[A03.untrusted-header] reject host 1: \"other.testing.typeit.com.ar.evil.test\""
+        "methodName": "[A03.untrusted-header] reject host 1: \"other.testing.bemol.com.ar.evil.test\""
       },
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaInstitutionalHostIsolationTest",
-        "methodName": "[A03.untrusted-header] reject host 2: \"https://cboero.testing.typeit.com.ar\""
+        "methodName": "[A03.untrusted-header] reject host 2: \"https://cboero.testing.bemol.com.ar\""
       },
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaInstitutionalHostIsolationTest",
-        "methodName": "[A03.untrusted-header] reject host 3: \"cboero.testing.typeit.com.ar/path\""
+        "methodName": "[A03.untrusted-header] reject host 3: \"cboero.testing.bemol.com.ar/path\""
       },
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaInstitutionalHostIsolationTest",
-        "methodName": "[A03.untrusted-header] reject host 4: \"x@y.testing.typeit.com.ar\""
+        "methodName": "[A03.untrusted-header] reject host 4: \"x@y.testing.bemol.com.ar\""
       },
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaInstitutionalHostIsolationTest",
-        "methodName": "[A03.untrusted-header] reject host 5: \"cboero.testing.typeit.com.ar:8443\""
+        "methodName": "[A03.untrusted-header] reject host 5: \"cboero.testing.bemol.com.ar:8443\""
       },
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaInstitutionalHostIsolationTest",
-        "methodName": "[A03.untrusted-header] reject host 6: \"nested.cboero.testing.typeit.com.ar\""
+        "methodName": "[A03.untrusted-header] reject host 6: \"nested.cboero.testing.bemol.com.ar\""
       },
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaInstitutionalHostIsolationTest",
-        "methodName": "[A03.untrusted-header] reject host 7: \"www.testing.typeit.com.ar\""
+        "methodName": "[A03.untrusted-header] reject host 7: \"www.testing.bemol.com.ar\""
       },
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaInstitutionalHostIsolationTest",
-        "methodName": "[A03.untrusted-header] reject host 8: \"cboero.testing.typeit.com.ar,evil.test\""
+        "methodName": "[A03.untrusted-header] reject host 8: \"cboero.testing.bemol.com.ar,evil.test\""
       },
       {
         "task": "fastTest",
@@ -668,12 +668,12 @@
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaCanonicalFrontendUrlsTest",
-        "methodName": "[A06.canonical-email] canonical base \"testing.typeit.com.ar\""
+        "methodName": "[A06.canonical-email] canonical base \"testing.bemol.com.ar\""
       },
       {
         "task": "fastTest",
         "className": "ar.edu.utn.frvm.typeit.bemol_api.auth.services.QaCanonicalFrontendUrlsTest",
-        "methodName": "[A06.canonical-email] canonical base \"staging.typeit.com.ar\""
+        "methodName": "[A06.canonical-email] canonical base \"staging.bemol.com.ar\""
       },
       {
         "task": "fastTest",

@@ -1,4 +1,5 @@
-# Use with an environment override.
+# Shared service definitions for staging and disposable local acceptance fixtures.
+# Staging merges compose.staging.yaml over this file.
 name: bemol
 
 services:
@@ -6,6 +7,8 @@ services:
     image: ${UI_IMAGE:-ghcr.io/typeitorg/bemol-ui}:${UI_VERSION:?UI_VERSION is required}
     pull_policy: always
     init: true
+    ports:
+      - "127.0.0.1:${UI_HOST_PORT:-3000}:3000"
     environment:
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?AUTH_COOKIE_SECURE is required}
       BEMOL_API_URL: http://api:8080
@@ -107,7 +110,8 @@ services:
 
   api-storage-init:
     image: *api-image
-    pull_policy: always
+    profiles: [maintenance]
+    pull_policy: never
     user: "0:0"
     entrypoint: ["/bin/sh", "-ec"]
     command:

@@ -6,16 +6,19 @@ solo despliegues remotos, cambios de producción, commits ni pushes.
 
 ## Decisiones
 
-- El único ambiente compartido configurado es `staging`, preparado para Compose y deploy por SSH;
-  desarrollo local sigue perteneciendo a los repositorios de aplicación. No se configura un ambiente
-  QA/testing ni un despliegue manual adicional.
+- El único ambiente compartido configurado es `staging`, operado por SSH y Compose;
+  desarrollo local sigue perteneciendo a los repositorios de aplicación. No se
+  configura un ambiente QA/testing ni producción.
 - `publicSubdomain` opcional e independiente de `slug`, administrado por plataforma.
 - Logos PNG/JPEG, máximo 2 MiB, administrados por plataforma o por una institución
   con `INSTITUTION_UPDATE`; almacenamiento y autorizaciones existentes se conservan.
 - Accesos generales conservan selector. Los institucionales fijan contexto, nombre
-  y logo: `cboero.staging.bemol.com.ar` y, en una activación futura,
-  `cboero.typeit.com.ar`. `cboero.testing.typeit.com.ar` queda únicamente como
-  hostname sintético de los fixtures locales.
+  y logo. El contrato actual reconoce `cboero.staging.bemol.com.ar`, pero el nuevo
+  dominio todavía no tiene DNS, certificado ni routing institucional aprovisionados.
+  El formato objetivo `cboero-staging.bemol.com.ar` requiere cambios de API/UI;
+  `cboero.bemol.com.ar` corresponde a una activación futura de producción.
+  `cboero.testing.bemol.com.ar` queda únicamente como hostname sintético de los
+  fixtures locales. Este contrato no acredita acceso público a esos hostnames.
 
 ## Requisitos obligatorios
 
@@ -28,7 +31,7 @@ fallida, sin ejecutar o perteneciente a otro estado del código impide el cierre
 | Q01 | Las configuraciones persistentes y los stacks descartables de aceptación conservan aislamiento de redes, volúmenes y secretos. |
 | Q02 | El harness local usa perfil `prod`, PostgreSQL/Flyway y healthchecks; no usa H2 ni create-drop. |
 | Q03 | El backup conserva selección segura, validación del dump, permisos, retención y restauración sobre datos descartables. |
-| Q04 | Se rechazan ambientes inválidos y comandos retirados; credenciales ausentes o error SSH fallan el deploy. |
+| Q04 | El entrypoint de deploy usa lock compartido, valida recursos y backup, y falla ante errores de pull o de salud sin restauración automática. |
 | C01 | Develop/main y PRs ejecutan CI sin publicar; sólo staging publica y solicita deploy tras CI del mismo commit. |
 | I01 | Nombre público opcional, independiente, DNS-safe y reservado con unicidad PostgreSQL. |
 | I02 | Resolver público mínimo; nombres desconocidos/inactivos son 404, indisponibilidad es 503. |
@@ -66,7 +69,7 @@ cada requisito con su código, prueba y evidencia. Un bloqueo no cuenta como éx
 ## Separación respecto a los ambientes compartidos
 
 Este harness no configura DNS, secretos de Actions ni despliegues de ambientes.
-La operación compartida está descrita en [Staging](STAGING.md). Cambiar
+Staging se opera mediante [SSH y Compose](STAGING.md). Cambiar
 configuración compartida, datos persistentes o incorporar otro ambiente requiere
 autorización separada.
 
@@ -77,7 +80,7 @@ Compose compatible con `!override` (2.24.4 o posterior), OpenSSL, Python 3,
 Java 21/Gradle del proyecto y pnpm/dependencias instaladas en la UI.
 
 1. Ejecuta las pruebas negativas del propio verificador y las pruebas dirigidas
-   de configuración/backups/workflows. Estas últimas simulan Docker y peticiones HTTPS;
+   de configuración/backups/workflows. Estas últimas simulan dependencias externas;
    **no** prueban un despliegue remoto.
 2. Reejecuta los filtros de API registrados en `scripts/verification/api-tests.json`
    con PostgreSQL/Flyway/Redis reales para las pruebas de integración y los
@@ -86,7 +89,7 @@ Java 21/Gradle del proyecto y pnpm/dependencias instaladas en la UI.
    `ui-tests.json`, TypeScript y lint/formato sólo de los archivos cambiados.
 3. Construye imágenes `prod` de la API/UI actuales y crea **dos stacks descartables**
    propios, con TLS autofirmado y resolución de hosts únicamente dentro de Chromium.
-   Las claves `qa`/`staging` y el dominio `testing.typeit.com.ar` se conservan
+   Las claves `qa`/`staging` y el dominio `testing.bemol.com.ar` se conservan
    únicamente como fixtures históricos consumidos por pruebas, no como ambientes
    desplegables. Ambos stacks usan el perfil `prod`, correo capturado y secretos
    sintéticos sin semillas implícitas. No son los ambientes compartidos existentes. Las identidades sintéticas
@@ -127,10 +130,13 @@ se rechaza. El comando no publica imágenes ni se conecta por SSH.
 
 ## Disponibilidad actual y cambio de alcance
 
-El retiro de ambientes y del deploy anterior no elimina las pruebas institucionales
-ni el verificador de evidencia. Las comprobaciones de workflow usan SSH simulado,
-sin conectarse al VPS, y no prueban overlays de producción. Q03 comprueba seguridad
-del backup; Q04 rechaza entradas y verifica que falle un deploy SSH simulado. Cambiar estos contratos invalida evidencia anterior.
+El cambio a SSH y Compose no elimina las pruebas institucionales ni el verificador
+de evidencia. Q03 mantiene el contrato de seguridad del backup; Q04 requiere
+evidencia vigente del entrypoint nuevo y de los workflows que lo invocan. Las
+pruebas o reportes anteriores de peticiones HTTPS a Dokploy no acreditan ese
+contrato. Los overlays de producción siguen fuera del alcance. Cambiar estos
+contratos invalida evidencia anterior; no se ejecutó ni amplió la batería con esta
+actualización de despliegue.
 
 El runtime local genera sus overlays y Mailpit sin depender de archivos de ambiente.
 Para backup, comprueba ownership y pasa explícitamente su volumen PostgreSQL

@@ -95,11 +95,11 @@
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",
-        "fullName": "[A01.generic-flows] optional mode accepts a syntactically valid legacy Host staging.typeit.com.ar with blank new config"
+        "fullName": "[A01.generic-flows] optional mode accepts a syntactically valid legacy Host staging.bemol.com.ar with blank new config"
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",
-        "fullName": "[A01.generic-flows] optional mode accepts a syntactically valid legacy Host staging.typeit.com.ar:8443 with blank new config"
+        "fullName": "[A01.generic-flows] optional mode accepts a syntactically valid legacy Host staging.bemol.com.ar:8443 with blank new config"
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",
@@ -197,19 +197,19 @@
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",
-        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host https://staging.typeit.com.ar"
+        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host https://staging.bemol.com.ar"
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",
-        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host staging.typeit.com.ar/evil"
+        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host staging.bemol.com.ar/evil"
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",
-        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host staging.typeit.com.ar,peer"
+        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host staging.bemol.com.ar,peer"
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",
-        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host staging.typeit.com.ar:65536"
+        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host staging.bemol.com.ar:65536"
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",
@@ -217,7 +217,7 @@
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",
-        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host user@staging.typeit.com.ar"
+        "fullName": "[A03.untrusted-header] legacy mode still rejects malformed Host user@staging.bemol.com.ar"
       },
       {
         "path": "src/common/services/institutional-host/classify-institutional-host.util.test.ts",

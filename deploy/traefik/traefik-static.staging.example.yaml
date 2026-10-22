@@ -1,8 +1,15 @@
-# Set the ACME email before use.
+# Install as /etc/bemol/traefik/traefik.yml with the existing ACME contact.
+api:
+  dashboard: true
+  insecure: false
+
 providers:
   file:
     directory: /etc/traefik/dynamic
     watch: true
+
+log:
+  level: INFO
 
 entryPoints:
   web:
@@ -48,7 +55,10 @@ certificatesResolvers:
   cloudflare-staging:
     acme:
       email: replace-with-acme-contact@example.invalid
-      storage: /var/lib/traefik/acme-cloudflare-staging.json
+      storage: /etc/traefik/dynamic/.secrets/acme-cloudflare-staging.json
       dnsChallenge:
         provider: cloudflare
         resolvers: ["1.1.1.1:53", "8.8.8.8:53"]
+        propagation:
+          # Authoritative checks remain enabled; recursive caches may lag.
+          requireAllRNS: false

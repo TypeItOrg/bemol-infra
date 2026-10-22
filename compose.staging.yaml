@@ -1,8 +1,9 @@
-# Load after compose.yaml.
+# Merge over compose.yaml; never deploy the shared base on its own.
 name: bemol-staging
 
 services:
   ui:
+    ports: !reset []
     environment:
       DEPLOYMENT_ENV: staging
       AUTO_LOGIN_ENABLED: ${AUTO_LOGIN_ENABLED:-false}
@@ -11,9 +12,6 @@ services:
       proxy:
         aliases:
           - bemol-ui-staging
-    labels:
-      # Routing lives in Traefik files.
-      traefik.enable: "false"
 
   api:
     environment:
@@ -24,30 +22,30 @@ services:
     depends_on:
       api-storage-init:
         condition: service_completed_successfully
-    labels:
-      traefik.enable: "false"
 
-  redis:
-    labels:
-      traefik.enable: "false"
+  api-storage-init:
+    profiles: !reset []
+    pull_policy: always
 
   postgres:
     environment:
-      # Fail if the database is missing.
       DB_REQUIRE_EXISTING: "true"
-    labels:
-      traefik.enable: "false"
 
 volumes:
   ui-next-cache:
+    external: true
     name: bemol-ui-next-cache-staging
   postgres-data:
+    external: true
     name: bemol-api-postgres-data-staging
   redis-data:
+    external: true
     name: bemol-api-redis-data-staging
   api-logs:
+    external: true
     name: bemol-api-logs-staging
   api-storage:
+    external: true
     name: bemol-api-enrollment-storage-staging
 
 networks:

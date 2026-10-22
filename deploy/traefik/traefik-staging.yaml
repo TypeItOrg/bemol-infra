@@ -1,0 +1,195 @@
+# Install as /etc/bemol/traefik/dynamic/traefik-staging.yaml.
+http:
+  routers:
+    bemol-staging:
+      entryPoints: [websecure]
+      rule: Host(`staging.bemol.com.ar`)
+      priority: 100
+      service: bemol-staging
+      middlewares: [bemol-cloudflare-only, bemol-common, bemol-rate-cloudflare, bemol-flight-cloudflare, bemol-flight-host]
+      tls: &staging-tls
+        certResolver: cloudflare-staging
+        domains:
+          - main: staging.bemol.com.ar
+
+    bemol-staging-http:
+      entryPoints: [web]
+      rule: Host(`staging.bemol.com.ar`)
+      service: noop@internal
+      middlewares: [bemol-cloudflare-only, bemol-https]
+
+    bemol-staging-write:
+      entryPoints: [websecure]
+      rule: Host(`staging.bemol.com.ar`) && (Method(`POST`) || Method(`PUT`) || Method(`PATCH`))
+      priority: 200
+      service: bemol-staging
+      middlewares: [bemol-cloudflare-only, bemol-common, bemol-rate-cloudflare, bemol-flight-cloudflare, bemol-flight-host, bemol-body]
+      tls: *staging-tls
+
+    bemol-staging-auth:
+      entryPoints: [websecure]
+      rule: Host(`staging.bemol.com.ar`) && Method(`POST`) && PathRegexp(`^/(auth/(login|register|password-recovery(/reset)?)|admin/auth/login)/?$`)
+      priority: 300
+      service: bemol-staging
+      middlewares: [bemol-cloudflare-only, bemol-common, bemol-rate-cloudflare, bemol-auth-cloudflare, bemol-flight-cloudflare, bemol-flight-host, bemol-body]
+      tls: *staging-tls
+
+    bemol-staging-private-paths:
+      entryPoints: [websecure]
+      rule: Host(`staging.bemol.com.ar`) && (PathPrefix(`/actuator`) || Path(`/api/v1`) || PathPrefix(`/api/v1/`))
+      priority: 400
+      service: noop@internal
+      middlewares: [bemol-headers, bemol-deny]
+      tls: *staging-tls
+
+    traefik-staging:
+      entryPoints: [websecure]
+      rule: Host(`traefik-staging.bemol.com.ar`)
+      service: api@internal
+      middlewares: [bemol-cloudflare-only, bemol-common, bemol-rate-cloudflare, bemol-flight-cloudflare, bemol-flight-host, traefik-dashboard-auth, traefik-dashboard-root]
+      tls:
+        certResolver: cloudflare-staging
+        domains:
+          - main: traefik-staging.bemol.com.ar
+
+    traefik-staging-http:
+      entryPoints: [web]
+      rule: Host(`traefik-staging.bemol.com.ar`)
+      service: noop@internal
+      middlewares: [bemol-cloudflare-only, bemol-https]
+
+  services:
+    bemol-staging:
+      loadBalancer:
+        servers:
+          - url: http://bemol-ui-staging:3000
+        passHostHeader: true
+        serversTransport: bemol-staging
+        responseForwarding:
+          flushInterval: -1ms
+
+  serversTransports:
+    bemol-staging:
+      maxIdleConnsPerHost: 32
+      forwardingTimeouts:
+        dialTimeout: 5s
+        responseHeaderTimeout: 60s
+        idleConnTimeout: 30s
+
+  middlewares:
+    traefik-dashboard-auth:
+      basicAuth:
+        usersFile: /etc/traefik/dynamic/.secrets/dashboard-users
+        removeHeader: true
+
+    traefik-dashboard-root:
+      redirectRegex:
+        regex: '^https://traefik-staging\.bemol\.com\.ar/?$'
+        replacement: https://traefik-staging.bemol.com.ar/dashboard/
+        permanent: true
+
+    bemol-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+    bemol-common:
+      chain:
+        middlewares: [bemol-headers, bemol-compress]
+
+    bemol-headers:
+      headers:
+        frameDeny: false
+        customFrameOptionsValue: SAMEORIGIN
+        contentTypeNosniff: true
+        referrerPolicy: strict-origin-when-cross-origin
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentSecurityPolicy: "base-uri 'self'; frame-ancestors 'self'; object-src 'none'"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+
+    bemol-compress:
+      compress:
+        encodings: [gzip]
+        minResponseBodyBytes: 1024
+        includedContentTypes:
+          - text/html
+          - text/plain
+          - text/css
+          - text/xml
+          - text/javascript
+          - application/json
+          - application/javascript
+          - application/manifest+json
+          - application/xml
+          - application/xml+rss
+          - image/svg+xml
+
+    # For proxied application traffic, check the TCP peer BEFORE
+    # interpreting CF-Connecting-IP; these ranges do not authenticate our zone.
+    bemol-cloudflare-only:
+      ipAllowList:
+        sourceRange:
+          - 103.21.244.0/22
+          - 103.22.200.0/22
+          - 103.31.4.0/22
+          - 104.16.0.0/13
+          - 104.24.0.0/14
+          - 108.162.192.0/18
+          - 131.0.72.0/22
+          - 141.101.64.0/18
+          - 162.158.0.0/15
+          - 172.64.0.0/13
+          - 173.245.48.0/20
+          - 188.114.96.0/20
+          - 190.93.240.0/20
+          - 197.234.240.0/22
+          - 198.41.128.0/17
+          - 2400:cb00::/32
+          - 2606:4700::/32
+          - 2803:f800::/32
+          - 2405:b500::/32
+          - 2405:8100::/32
+          - 2a06:98c0::/29
+          - 2c0f:f248::/32
+
+    bemol-rate-cloudflare:
+      rateLimit:
+        average: 20
+        period: 1s
+        burst: 100
+        sourceCriterion: &cloudflare-source
+          requestHeaderName: CF-Connecting-IP
+
+    bemol-auth-cloudflare:
+      rateLimit:
+        average: 30
+        period: 1m
+        burst: 20
+        sourceCriterion: *cloudflare-source
+
+    # Requests in flight, not Nginx TCP connections. Buckets are per router and
+    # Traefik instance; 200/hostname is NOT the former shared 200/server bound.
+    bemol-flight-cloudflare:
+      inFlightReq:
+        amount: 50
+        sourceCriterion: *cloudflare-source
+
+    bemol-flight-host:
+      inFlightReq:
+        amount: 200
+        sourceCriterion:
+          requestHost: true
+
+    # Only write routers use buffering: GET downloads/SSE remain streaming.
+    # Traefik buffers write responses too, even with maxResponseBodyBytes=0.
+    bemol-body:
+      buffering:
+        maxRequestBodyBytes: 33554432
+        memRequestBodyBytes: 1048576
+
+    # Public denied paths return 403 instead of the former Nginx 404, never UI/API.
+    bemol-deny:
+      ipAllowList:
+        # The unspecified address cannot be a connected TCP peer. Not /0.
+        sourceRange: [0.0.0.0/32]

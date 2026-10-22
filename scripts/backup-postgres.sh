@@ -72,6 +72,6 @@ mv "$temporary_file" "$final_file"
 trap - EXIT HUP INT TERM
 
 # Retention only runs after the new archive has passed pg_restore validation.
-find "$backup_dir" -type f -name "bemol-$environment-*.dump" -mtime "+$retention_days" -delete
+find "$backup_dir" -maxdepth 1 -type f -name "bemol-$environment-*.dump" -mtime "+$retention_days" -delete
 
 echo "Validated PostgreSQL backup created at $final_file"

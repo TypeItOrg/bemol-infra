@@ -161,8 +161,6 @@ class InfraConfigTests(unittest.TestCase):
             self.assertNotEqual(fixture["networks"]["default"]["name"], live["networks"]["default"]["name"])
 
     def test_staging_compose(self):
-        compose_file = INFRA / "compose.staging.yaml"
-        self.assertNotRegex(compose_file.read_text(), r"(?m)^[^#\n]*!(?:reset|override)\b")
         configured = self.render(synthetic_env() | {"UI_VERSION": "staging", "API_VERSION": "staging"})
         expected_volumes = {
             "ui-next-cache": "bemol-ui-next-cache-staging",
@@ -188,7 +186,8 @@ class InfraConfigTests(unittest.TestCase):
         self.assertEqual(set(services["ui"]["networks"]), {"default", "proxy"})
         self.assertEqual(configured["networks"]["default"]["name"], "bemol-network-staging")
         self.assertTrue(configured["networks"]["default"]["external"])
-        self.assertTrue(configured["networks"]["proxy"]["external"])
+        self.assertEqual((configured["networks"]["proxy"]["name"], configured["networks"]["proxy"]["external"]),
+                         ("bemol-proxy-staging", True))
         self.assertEqual(services["api"]["depends_on"]["api-storage-init"]["condition"],
                          "service_completed_successfully")
         helper = services["api-storage-init"]
@@ -217,7 +216,7 @@ class InfraConfigTests(unittest.TestCase):
         spec.loader.exec_module(runtime)
         state = {"namespace": "bemol-acceptance-synthetic", "owner": "synthetic-owner", "tlsPort": 8443,
                  "images": {"api": {"tag": "synthetic-api:local"}, "ui": {"tag": "synthetic-ui:local"}}, "stacks": {}}
-        runtime.make_stack(state, "qa", "testing.typeit.com.ar", self.work)
+        runtime.make_stack(state, "qa", "testing.bemol.com.ar", self.work)
         stack = state["stacks"]["qa"]
         result = command(["docker", "compose", "--profile", "maintenance", "--env-file", stack["envFile"],
                           "-f", str(INFRA / "compose.yaml"), "-f", stack["overrideFile"], "config", "--format", "json"],
@@ -453,21 +452,14 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
             self.assertEqual(failed.returncode, 255)
 
     def test_documented_contract(self):
-        output = self.work / "rendered-staging"
-        command(["python3", str(INFRA / "scripts/render-staging-config.py"),
-                 "--output-dir", str(output)], INFRA)
-        template = (output / ".env.staging.example").read_text()
+        template = (INFRA / ".env.staging.example").read_text()
         values = dict(line.split("=", 1) for line in template.splitlines() if line and not line.startswith("#"))
-        public_config = (INFRA / "deploy/staging.env").read_text()
-        settings = dict(line.split("=", 1) for line in public_config.splitlines()
-                        if line and not line.startswith("#"))
-        domain = settings["STAGING_SUBDOMAIN"] + "." + settings["BASE_DOMAIN"]
-        self.assertEqual(values["INSTITUTIONAL_BASE_DOMAIN"], domain)
-        self.assertEqual(values["WEBAUTHN_RP_ID"], domain)
-        self.assertEqual(values["WEBAUTHN_ALLOWED_ORIGINS"], "https://" + domain)
+        self.assertEqual(values["INSTITUTIONAL_BASE_DOMAIN"], "staging.bemol.com.ar")
+        self.assertEqual(values["WEBAUTHN_RP_ID"], "staging.bemol.com.ar")
+        self.assertEqual(values["WEBAUTHN_ALLOWED_ORIGINS"], "https://staging.bemol.com.ar")
         for key in ("DB_PASSWORD", "JWT_SECRET", "REFRESH_REPLAY_ENCRYPTION_KEY"):
             self.assertIn(key, values)
-        self.assertIn("SSH", (INFRA / "docs/STAGING.md").read_text())
+        self.assertIn("Compose", (INFRA / "docs/STAGING.md").read_text())
         for removed in ("compose.production.yaml", ".env.example",
                         "docs/PRODUCTION.md", "deploy/nginx",
                         "scripts/bootstrap.sh", "scripts/prepare-volumes.sh", "scripts/deploy-service.sh",
