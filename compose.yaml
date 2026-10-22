@@ -1,5 +1,4 @@
-# Shared service definitions for Dokploy and disposable local acceptance fixtures.
-# The deployed entrypoint is compose.dokploy.staging.yaml.
+# Use with an environment override.
 name: bemol
 
 services:
@@ -7,8 +6,6 @@ services:
     image: ${UI_IMAGE:-ghcr.io/typeitorg/bemol-ui}:${UI_VERSION:?UI_VERSION is required}
     pull_policy: always
     init: true
-    ports:
-      - "127.0.0.1:${UI_HOST_PORT:-3000}:3000"
     environment:
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?AUTH_COOKIE_SECURE is required}
       BEMOL_API_URL: http://api:8080
@@ -110,8 +107,7 @@ services:
 
   api-storage-init:
     image: *api-image
-    profiles: [maintenance]
-    pull_policy: never
+    pull_policy: always
     user: "0:0"
     entrypoint: ["/bin/sh", "-ec"]
     command:
@@ -165,7 +161,12 @@ services:
       - "5432"
     volumes:
       - postgres-data:/var/lib/postgresql
-      - ./docker/postgres-entrypoint.sh:/usr/local/bin/postgres-entrypoint.sh:ro
+      - type: bind
+        source: ./docker/postgres-entrypoint.sh
+        target: /usr/local/bin/postgres-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:?DB_USER is required} -d ${DB_NAME:?DB_NAME is required}"]
       interval: 10s

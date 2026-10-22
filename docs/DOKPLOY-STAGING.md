@@ -1,3 +1,7 @@
+> **Referencia del despliegue anterior con Dokploy.** La configuración de reemplazo
+> y el corte pendiente del VPS se describen en [STAGING.md](STAGING.md). Este
+> documento conserva el procedimiento anterior; no es la guía operativa nueva.
+
 # Bemol / staging: Dokploy y Traefik paso a paso
 
 Esta guía explica el entorno existente en `cristinet`, desde encontrar su Compose
@@ -80,7 +84,10 @@ revisar la receta, pero no muestra una prueba de salud ni garantiza qué se ejec
 ## Paso 3. Ubicar las variables privadas
 
 1. Abrir **Environment** del Compose **Bemol staging**.
-2. Comparar los nombres con [.env.dokploy.staging.example](../.env.dokploy.staging.example).
+2. Ejecutar `make render-staging-config` y comparar los nombres con el ejemplo
+   generado `build/staging/.env.staging.example`. La
+   [plantilla fuente](../.env.staging.example) obtiene el dominio de
+   [deploy/staging.env](../deploy/staging.env); no copiar sus placeholders al panel.
 3. Conservar claves de autenticación, correo y WebAuthn existentes. Cambiar nombres
    DB/rol y destinos de storage sólo después de copiar/migrar y verificar sus datos;
    los ejemplos no son valores para sobrescribir la configuración privada.
@@ -113,91 +120,88 @@ por esa red. El auxiliar `api-storage-init` prepara permisos y luego termina.
 
 ## Paso 5. Entender dónde se definen los dominios
 
-En Cloudflare, dentro de la zona `typeit.com.ar`, se mantienen estos DNS:
+El dominio de aplicación indicado para staging es `staging.bemol.com.ar`; las
+reglas preparadas utilizan la zona `bemol.com.ar` y su wildcard institucional. El
+dominio del panel se conserva abajo como referencia documentada independiente,
+no como resultado de una comprobación actual de DNS. El panel pertenece a su
+propia zona; no se renombra al cambiar el dominio de la aplicación.
 
 | Nombre | Destino | Proxy Cloudflare |
 |---|---|---|
-| `staging.typeit.com.ar` | IP del servidor de staging | Activado |
+| `staging.bemol.com.ar` | IP del servidor de staging | Activado |
 | `deploy-staging.typeit.com.ar` | IP del mismo servidor | Activado |
-| `*.staging.typeit.com.ar` | IP del mismo servidor | DNS-only |
+| `*.staging.bemol.com.ar` | IP del mismo servidor | DNS-only |
 
 Conservar registros exactos existentes: tienen precedencia sobre el wildcard. No
 crear AAAA sin IPv6 operativo ni alterar ajustes de toda la zona sin revisar impacto.
 
 DNS permite encontrar la IP; **no configura el proxy ni el certificado**. El
-hostname del panel se administra con su configuración de Web Server. Para la
-aplicación hay dos piezas deliberadamente distintas:
+hostname del panel se administra con su configuración de Web Server.
 
-- **Domains → `staging.typeit.com.ar`:** gestiona la ruta general HTTP/HTTPS hacia UI.
-- **Archivo de Traefik:** wildcard institucional, reglas específicas de autenticación,
-  escrituras y rutas privadas, y definiciones de middlewares compartidos.
+**Transición preparada en Git; no aplicada al servidor en este cambio.** El último
+registro operativo con Domains corresponde al dominio anterior
+`staging.typeit.com.ar`, con wildcard y reglas específicas en un archivo dinámico. La
+configuración objetivo define todas las rutas de la aplicación en
+[archivos propios separados por responsabilidad](../deploy/traefik/README.md).
 
-### Reconstruir la entrada de Domains (no duplicarla si ya existe)
-
-En el servicio **Bemol staging** del proyecto **Bemol**, abrir **Domains → Add Domain**:
-
-| Campo | Valor |
-|---|---|
-| Service Name | `ui` |
-| Host | `staging.typeit.com.ar` |
-| Path / Internal Path | `/` / `/` |
-| Strip Path / Custom Entrypoint | Desactivados |
-| Container Port | `3000` (interno, no puerto público del host) |
-| HTTPS | Activado |
-| Certificate Provider | Custom |
-| Custom Certificate Resolver | `cloudflare-staging` |
-| Middlewares, en este orden | `bemol-cloudflare-only@file`, `bemol-common@file`, `bemol-rate-cloudflare@file`, `bemol-flight-cloudflare@file`, `bemol-flight-host@file` |
-
-Guardar con **Create** prepara el dominio. **General → Deploy** aplica las etiquetas
-nativas a UI y puede recrear contenedores: acordar el corte antes. No añadir entradas
-sin sus protecciones ni duplicar las rutas generales en el archivo del proxy.
-
-El formulario de Dokploy v0.30.8 no admite `*` y sus routers Compose usan `Host()`;
-nuestro wildcard requiere `HostRegexp()` y permanece en archivo. No crear una
-entrada por institución ni activar dominios autogenerados/isolated deployments.
-Los middlewares de archivo se referencian con `@file` desde el router Docker nativo.
-
-**Cambiar el host en Domains no reescribe reglas específicas del archivo.** Revisar
-autenticación, escrituras, denegación de rutas, TLS y DNS conjuntamente antes de
-usar otro hostname. La interfaz no significa que todas las políticas HTTP sean
-editables allí.
+Antes de aplicar la transición, conservar la entrada Domains existente y comprobar
+el estado real del host. No recrearla ni retirarla sólo por leer esta guía. Después
+del corte documentado en el README de Traefik, no volver a crear dominios de la
+aplicación en Domains: duplicarían las rutas del file provider. El dominio del panel
+`deploy-staging.typeit.com.ar` mantiene su configuración propia de Dokploy.
 
 El wildcard institucional es DNS-only: expone el origen. Se conserva así, sin
 extras pagos, porque el certificado gratuito del edge de Cloudflare no cubre
-`institucion.staging.typeit.com.ar`. El certificado del origen es otra cosa.
+`institucion.staging.bemol.com.ar`. El certificado del origen es otra cosa.
 
 ## Paso 6. Localizar y comprender la configuración de Traefik
 
-En el panel, **Traefik File System** permite consultar sus archivos. Hay dos capas:
+El dominio base (`BASE_DOMAIN`) y el nombre de staging (`STAGING_SUBDOMAIN`) se
+definen una sola vez en [deploy/staging.env](../deploy/staging.env).
+`STAGING_DOMAIN` se deriva de ambos; no se configura por separado.
+Las plantillas de [deploy/traefik/](../deploy/traefik/README.md) se procesan con
+`make render-staging-config`. La división permite distinguir qué se enruta, a qué
+destino y con qué políticas:
 
-1. **Estática:** entrada HTTP/HTTPS, providers y mecanismo de certificados. El
-   [fragmento estático](../deploy/dokploy/traefik-static.staging.example.yaml) se
-   fusiona con la configuración existente de Dokploy; no la reemplaza completa.
-2. **Dinámica de archivo:** [traefik-staging.yaml](../deploy/dokploy/traefik-staging.yaml)
-   conserva el wildcard, reglas específicas, destino, compresión, headers y límites.
-   Se instala como archivo independiente en el directorio dinámico ya montado.
-3. **Dinámica de Docker:** Dokploy convierte el dominio general de Domains en
-   etiquetas de UI al desplegar. El provider Docker de Traefik las detecta; el
-   contenedor sigue conectado a `dokploy-network`, sin abrir un puerto UI al host.
+| Archivo dinámico | Responsabilidad |
+|---|---|
+| `routers.yaml` | Hostnames, rutas, métodos, prioridades y TLS |
+| `services.yaml` | Alias UI y transportes HTTP |
+| `middlewares-common.yaml` | Headers y compresión |
+| `middlewares-access.yaml` | Origen Cloudflare, headers del tráfico directo y denegación |
+| `middlewares-limits.yaml` | Rate limiting, concurrencia y tamaño de escrituras |
+| `middlewares-redirects.yaml` | HTTPS y hostname canónico |
 
-Dentro de la configuración dinámica:
+Las seis fuentes están en `deploy/traefik/dynamic/staging/`. Se instalan sus
+resultados de `build/staging/traefik/dynamic/`, que el file provider carga juntos;
+no instalar las plantillas con variables sin resolver. Sus nombres no definen la prioridad de los routers. Los servicios
+general y especializado apuntan a `http://bemol-ui-staging:3000`; conservan sus
+respectivas políticas de transporte. Sólo UI comparte red con el proxy.
 
-- `routers` decide qué hostname/ruta atiende cada regla de archivo; el router base
-  del dominio general ya no está ahí, lo genera Domains.
-- `services.bemol-staging` reenvía a `http://bemol-ui-staging:3000`.
-- `middlewares` aplica headers, gzip, rate limiting y límites de cuerpo/concurrencia.
-- `tls` enlaza los routers al resolver de certificados `cloudflare-staging`.
+Hay dos ejemplos estáticos para responsabilidades distintas:
 
-**El archivo de Git no es el archivo montado del servidor.** Un push a infra o
-Deploy del Compose no copia estas reglas al proxy. Para modificarlas: versionar,
-aplicar al archivo montado mediante una operación autorizada y verificar recarga.
-Los cambios dinámicos los recoge el file provider; los estáticos o de Environment
-del proxy requieren recrearlo en una ventana acordada. No tocarlo para seguir la guía.
+- [Proxy independiente](../deploy/traefik/static/traefik.staging.example.yaml):
+  documento completo con entrypoints, file provider y resolver ACME. El
+  [Compose independiente](../compose.traefik.staging.yaml) define su contenedor,
+  variable del token y montajes; permanece pendiente de aplicar al servidor.
+- [Integración con Dokploy](../deploy/dokploy/traefik-static.staging.example.yaml):
+  fragmento para fusionar con la configuración compartida existente sin reemplazar
+  los providers ni las rutas del panel.
+
+El panel **Traefik File System** permite consultar los archivos montados; no es la
+fuente de las reglas de Bemol después de la transición. El dashboard de Traefik
+inspecciona la configuración efectiva y no ejecuta Compose ni despliegues.
+
+**Git y el servidor son estados distintos.** Publicar infra o desplegar el Compose
+no copia este conjunto al proxy. La transición del README incluye el reemplazo del
+monolito, verificación del router `@file`, retiro de la entrada Domains de la
+aplicación y vuelta al estado previo. No modificar routers del panel ni conservar
+copias duplicadas de las mismas reglas dentro del directorio observado.
 
 ## Paso 7. Seguir cómo se obtiene y renueva HTTPS
 
 El resolver `cloudflare-staging` solicita a Let's Encrypt un certificado para
-`staging.typeit.com.ar` y `*.staging.typeit.com.ar`:
+`staging.bemol.com.ar` y `*.staging.bemol.com.ar`:
 
 1. Traefik inicia la solicitud mediante ACME, el protocolo de certificados.
 2. Su proveedor DNS usa el token privado de Cloudflare para publicar temporalmente
@@ -207,9 +211,11 @@ El resolver `cloudflare-staging` solicita a Let's Encrypt un certificado para
 
 La configuración del token está descrita en [traefik.env.example](../deploy/dokploy/traefik.env.example):
 `CF_DNS_API_TOKEN_FILE` apunta a un archivo privado, no contiene el token en Git.
-Va en el entorno de **Traefik**, no en Environment de Bemol ni en los secrets de
-Actions. Su alcance es la zona `typeit.com.ar`, con Zone:Read y DNS:Edit. Mantener
-directorio privado 0700 y token/estado ACME 0600; respaldarlos sin publicarlos.
+Es el ejemplo de integración con Dokploy; el [Compose independiente](../compose.traefik.staging.yaml)
+declara la variable y el montaje para el proxy nuevo. Va en el entorno de **Traefik**,
+no en Environment de Bemol ni en los secrets de Actions. Su alcance es la zona
+`bemol.com.ar`, con Zone:Read y DNS:Edit. Mantener directorio privado 0700 y
+token/estado ACME 0600; respaldarlos sin publicarlos.
 
 No crear otro token ni reiniciar el proxy si ya está configurado. Revisar logs de
 Traefik, vigencia y cobertura del certificado al validar renovaciones. No se usa
@@ -223,7 +229,7 @@ directamente: tener certificado válido no oculta la IP.
 ## Paso 8. Entender el alta automática de un subdominio institucional
 
 Ejemplo conceptual: una institución activa con `publicSubdomain=escuela` usa
-`https://escuela.staging.typeit.com.ar`. No crear registros reales para leer esta guía.
+`https://escuela.staging.bemol.com.ar`. No crear registros reales para leer esta guía.
 
 1. En la administración de la institución, configurar su subdominio público con
    los permisos correspondientes; no se deduce automáticamente de su nombre o slug.
@@ -237,7 +243,7 @@ token DNS del paso 7 valida certificados, no crea un registro A por institución
 La aplicación comprueba formato, unicidad y nombres reservados. Desconocidos o
 inactivos no son instituciones válidas; renombrar rompe el enlace anterior.
 Validar accesos nuevos sólo con datos de prueba autorizados. El RP WebAuthn se
-mantiene en `staging.typeit.com.ar`; no cambiarlo ni poner un wildcard como origen.
+mantiene en `staging.bemol.com.ar`; no cambiarlo ni poner un wildcard como origen.
 
 ## Paso 9. Obtener el Compose ID y conectar GitHub Actions
 
@@ -277,8 +283,9 @@ ni colocarla en URLs; mantener su revocación independiente de otras claves.
 4. Si pasa, construye la imagen y publica los tags `sha-<commit>` y `staging` en GHCR.
 5. Envía una petición HTTPS `POST /api/compose.deploy` a `DOKPLOY_URL`, con cabecera
    `x-api-key` y un cuerpo que contiene `composeId: DOKPLOY_STAGING_COMPOSE_ID`.
-6. Dokploy recibe la solicitud, toma infra/main + Environment, incorpora las
-   etiquetas de los dominios nativos configurados y descarga las imágenes.
+6. Dokploy recibe la solicitud, toma infra/main + Environment y descarga las
+   imágenes. Mientras exista la entrada Domains de la aplicación, incorpora sus
+   etiquetas; después de la transición, las rutas de Bemol provienen de archivos.
 7. Compose recrea lo que cambió, reutilizando las redes y volúmenes Bemol ya migrados.
    Durante la transición no desplegar hasta completar RENOMBRE-BEMOL.md.
 8. Revisar **Deployments** en Dokploy y luego **Containers**, logs y salud HTTPS.
@@ -303,6 +310,14 @@ Para cambiar una variable de runtime ya declarada en Compose:
 Guardar o reiniciar el contenedor no actualiza su entorno. Una variable nueva
 necesita consumidor en la aplicación, paso explícito por Compose y plantilla/valor
 privado actualizados. Lo compilado en el bundle del navegador requiere otra imagen.
+
+El tag `staging` es una referencia móvil de GHCR y funciona con cualquier motor
+Docker; no depende de Dokploy. Si pasa de la imagen A a la B, pedir otra vez
+`:staging` obtiene B, aunque el historial muestre un deploy anterior. Para volver
+a A, seleccionar su tag `sha-<commit>` conservado y desplegarlo. El historial de
+operaciones no fija por sí solo las versiones de API/UI; registrar ambas referencias
+y conservar las imágenes en GHCR. Los tags SHA se mantienen sin sobrescribir;
+el digest identifica de forma inmutable el contenido de una imagen.
 
 Para volver a una versión, seleccionar ambos tags SHA conocidos y desplegar sólo
 si son compatibles con la base actual. No hay rollback automático ni reversión de
@@ -344,14 +359,32 @@ no confundirlo con el `appName` ni reutilizar el ID del servicio retirado.
 
 ## Registro histórico: dominio general nativo del 2026-10-20
 
-Los nombres siguientes registran aquella ventana, no son identificadores objetivo
-ni evidencia de que el renombre técnico Bemol se haya aplicado.
+Este registro conserva la configuración nativa de Domains de aquella ventana.
+La reorganización actual de reglas en archivos está preparada en Git y no acredita
+que se haya aplicado al host. Los nombres siguientes tampoco prueban el estado
+actual del renombre técnico Bemol.
 
 **Aplicado y verificado.** `staging.typeit.com.ar` aparece en Domains del servicio
 Staging, con HTTPS, resolver `cloudflare-staging` y los cinco middlewares de la tabla.
 Se comprobó el despliegue nativo **Done**, los routers HTTP/HTTPS `@docker` habilitados
 y la ausencia de middlewares heredados según el inventario de transición: la entrada del panel atiende realmente el
 tráfico general, no es decorativa. Wildcard y rutas específicas permanecen `@file`.
+
+La tabla conserva los parámetros anteriores como referencia de recuperación. No
+recrear esta entrada después del corte a archivos salvo que se esté deshaciendo
+la transición; prevalecen los valores efectivos capturados antes del cambio.
+
+| Campo anterior de Domains | Valor registrado |
+|---|---|
+| Service Name | `ui` |
+| Host | `staging.typeit.com.ar` |
+| Path / Internal Path | `/` / `/` |
+| Strip Path / Custom Entrypoint | Desactivados |
+| Container Port | `3000` |
+| HTTPS | Activado |
+| Certificate Provider | Custom |
+| Custom Certificate Resolver | `cloudflare-staging` |
+| Middlewares, en este orden | `bemol-cloudflare-only@file`, `bemol-common@file`, `bemol-rate-cloudflare@file`, `bemol-flight-cloudflare@file`, `bemol-flight-host@file` |
 
 Para no cambiar código durante el corte se utilizó un patch temporal del Compose
 con los manifests ejecutables exactos de UI/API. No se abrió ni modificó Environment.

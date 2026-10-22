@@ -29,3 +29,19 @@
   consultar información académica y dar seguimiento a los distintos procesos institucionales,
   mejorando la organización y facilitando la gestión cotidiana.
 </p>
+
+## Operación de staging
+
+- [Despliegues por SSH, variables y datos](docs/STAGING.md).
+- [Reglas de Traefik por responsabilidad y transición a archivos propios](deploy/traefik/README.md).
+- [Compose base de la aplicación](compose.yaml) y [diferencias de staging](compose.staging.yaml).
+- [Compose del proxy Traefik independiente](compose.traefik.staging.yaml).
+
+Staging combina `compose.yaml` y `compose.staging.yaml`; el archivo de producción
+se incorporará cuando se prepare ese entorno.
+
+El dominio base y el subdominio de staging se definen en
+[deploy/staging.env](deploy/staging.env); el hostname de staging se deriva de ambos.
+`make prepare-staging` genera la configuración y verifica los volúmenes existentes.
+Después, `make deploy-staging` descarga las imágenes y actualiza los contenedores.
+`make render-staging-config` permite generar sólo las reglas y el ejemplo de entorno.

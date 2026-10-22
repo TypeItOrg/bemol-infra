@@ -1,10 +1,8 @@
-# Compose entrypoint for Dokploy; deploy this file, not the base on its own.
-# Supply both *_VERSION variables: the extended base requires them before merging.
+# Legacy Dokploy setup.
 name: bemol-staging
 
 services:
   ui:
-    # Dokploy rewrites YAML and drops !reset; define UI without inherited ports.
     image: ${UI_IMAGE:-ghcr.io/typeitorg/bemol-ui}:${UI_VERSION:-staging}
     pull_policy: always
     init: true
@@ -44,7 +42,7 @@ services:
         aliases:
           - bemol-ui-staging
     labels:
-      # Dokploy enables routing here when a native UI domain is configured.
+      # Dokploy Domains can override routing.
       traefik.enable: "false"
 
   api:
@@ -64,7 +62,6 @@ services:
       traefik.enable: "false"
 
   api-storage-init:
-    # No maintenance profile: this must complete before API startup in Dokploy.
     image: *api-image
     pull_policy: always
     user: "0:0"
@@ -102,10 +99,10 @@ services:
       file: compose.yaml
       service: postgres
     environment:
-      # A renamed DB_NAME must never silently create an empty shared database.
+      # Fail if the database is missing.
       DB_REQUIRE_EXISTING: "true"
     volumes:
-      # Dokploy File Mount, not a bind into its disposable Git checkout.
+      # Dokploy mounts this file.
       - type: bind
         source: ../files/postgres-entrypoint.sh
         target: /usr/local/bin/postgres-entrypoint.sh

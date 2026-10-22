@@ -281,7 +281,8 @@
   "sourcePaths": {
     "Q01": [
       "infra/compose.yaml",
-      "infra/compose.dokploy.staging.yaml",
+      "infra/compose.staging.yaml",
+      "infra/compose.traefik.staging.yaml",
       "infra/scripts/verification/runtime.py"
     ],
     "Q02": [
@@ -298,7 +299,10 @@
       "infra/Makefile",
       "infra/tests/infra-config.test.py",
       "api/.github/workflows/deploy-staging.yaml",
-      "ui/.github/workflows/deploy-staging.yaml"
+      "ui/.github/workflows/deploy-staging.yaml",
+      "infra/scripts/deploy-staging.sh",
+      "infra/scripts/compose-staging.sh",
+      "infra/scripts/prepare-staging.sh"
     ],
     "C01": [
       "api/.github/workflows/ci.yaml",
@@ -361,9 +365,11 @@
     ],
     "D01": [
       "infra/docs/institutional-access-checklist.md",
-      "infra/docs/DOKPLOY-STAGING.md",
-      "infra/docs/DOKPLOY-STAGING-REFERENCIA.md",
-      "infra/.env.dokploy.staging.example",
+      "infra/docs/STAGING.md",
+      "infra/deploy/traefik/README.md",
+      "infra/.env.staging.example",
+      "infra/deploy/staging.env",
+      "infra/scripts/render-staging-config.py",
       "api/.env.dev.example",
       "ui/.env.example"
     ],

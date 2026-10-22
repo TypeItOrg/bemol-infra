@@ -6,6 +6,11 @@
 > [RENOMBRE-BEMOL.md](RENOMBRE-BEMOL.md). Nada de este registro acredita el estado
 > actual del host ni autoriza crear volúmenes vacíos o sustituir datos.
 
+La configuración versionada de Traefik se reorganizó en
+[deploy/traefik/](../deploy/traefik/README.md); su aplicación al servidor está pendiente.
+Las rutas `deploy/dokploy/traefik-staging.yaml` citadas abajo pertenecen al historial
+y no representan el conjunto actual de archivos.
+
 Para aprender el flujo en orden, empezar por la [guía paso a paso](DOKPLOY-STAGING.md).
 El proyecto visible se llama **Bemol**, el environment **staging** y el servicio
 Compose **Staging**. En el historial aparecen sus nombres anteriores, Boero staging

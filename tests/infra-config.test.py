@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Infrastructure config/script/workflow checks: synthetic envs and mocked Docker.
-
-Uses Python stdlib and the installed docker compose/jq CLIs. Never starts containers,
-reads an existing .env, connects via SSH or pushes. Full-stack proof belongs to acceptance.
-"""
+"""Check infrastructure config with synthetic data."""
 import argparse
 import ast
 import importlib.util
@@ -26,13 +22,13 @@ OLD_SHA = "a" * 40
 NEW_SHA = "b" * 40
 OTHER_SHA = "c" * 40
 CASE_TESTS = {
-    "Q01.isolated-compose": ["test_compose_isolation", "test_dokploy_staging_compose", "test_local_acceptance_compose"],
+    "Q01.isolated-compose": ["test_compose_isolation", "test_staging_compose", "test_local_acceptance_compose"],
     "Q02.persistent-readiness": ["test_persistent_profile", "test_postgres_final_readiness"],
     "Q03.backup-safety": ["test_backup_safety", "test_acceptance_backup_isolation"],
     "Q04.invalid-input": ["test_invalid_inputs", "test_removed_deployment_commands"],
-    "Q04.failed-deploy-request": ["test_dokploy_staging_workflows"],
+    "Q04.failed-deploy-request": ["test_staging_workflows"],
     "C01.publication-gates": ["test_publication_gates"],
-    "C01.existing-flows": ["test_existing_flows", "test_dokploy_staging_workflows"],
+    "C01.existing-flows": ["test_existing_flows", "test_staging_workflows"],
     "D01.configuration-runbook": ["test_documented_contract"],
 }
 
@@ -64,7 +60,7 @@ def write_env(path, values):
 
 
 def cli_environment():
-    # Compose interpolation must not inherit any developer environment variable.
+    # Ignore developer environment variables.
     return {k: v for k, v in os.environ.items() if k in
             {"PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "XDG_RUNTIME_DIR"}}
 
@@ -83,7 +79,7 @@ def scalar(text, indent, key):
     value = match.group(1)
     if value in (">-", ">", "|"):
         lines = text[match.end():].splitlines()
-        # Restrict multiline condition to contiguous indentation, not later steps.
+        # Stop at the next YAML key.
         value_lines = []
         for line in lines[1:]:
             if not line.startswith(" " * (indent + 2)):
@@ -124,7 +120,8 @@ class InfraConfigTests(unittest.TestCase):
         env_file = self.work / "synthetic-staging.env"
         write_env(env_file, values)
         result = command(["docker", "compose", "--env-file", str(env_file),
-                          "-f", str(INFRA / "compose.dokploy.staging.yaml"),
+                          "-f", str(INFRA / "compose.yaml"),
+                          "-f", str(INFRA / "compose.staging.yaml"),
                           "config", "--format", "json"], INFRA, cli_environment())
         return json.loads(result.stdout)
 
@@ -163,15 +160,10 @@ class InfraConfigTests(unittest.TestCase):
                 v["name"] for v in live["volumes"].values()))
             self.assertNotEqual(fixture["networks"]["default"]["name"], live["networks"]["default"]["name"])
 
-    def test_dokploy_staging_compose(self):
-        compose_file = INFRA / "compose.dokploy.staging.yaml"
+    def test_staging_compose(self):
+        compose_file = INFRA / "compose.staging.yaml"
         self.assertNotRegex(compose_file.read_text(), r"(?m)^[^#\n]*!(?:reset|override)\b")
-        env_file = self.work / "synthetic-dokploy.env"
-        write_env(env_file, synthetic_env() | {"UI_VERSION": "staging", "API_VERSION": "staging"})
-        result = command(["docker", "compose", "--env-file", str(env_file), "-f",
-                          str(compose_file), "config", "--format", "json"],
-                         INFRA, cli_environment())
-        configured = json.loads(result.stdout)
+        configured = self.render(synthetic_env() | {"UI_VERSION": "staging", "API_VERSION": "staging"})
         expected_volumes = {
             "ui-next-cache": "bemol-ui-next-cache-staging",
             "postgres-data": "bemol-api-postgres-data-staging",
@@ -192,11 +184,11 @@ class InfraConfigTests(unittest.TestCase):
             self.assertNotIn("container_name", service)
             if name in ("postgres", "redis"):
                 self.assertNotIn("ports", service)
-            self.assertEqual("dokploy-network" in service.get("networks", {}), name == "ui")
-        self.assertEqual(set(services["ui"]["networks"]), {"default", "dokploy-network"})
+            self.assertEqual("proxy" in service.get("networks", {}), name == "ui")
+        self.assertEqual(set(services["ui"]["networks"]), {"default", "proxy"})
         self.assertEqual(configured["networks"]["default"]["name"], "bemol-network-staging")
         self.assertTrue(configured["networks"]["default"]["external"])
-        self.assertTrue(configured["networks"]["dokploy-network"]["external"])
+        self.assertTrue(configured["networks"]["proxy"]["external"])
         self.assertEqual(services["api"]["depends_on"]["api-storage-init"]["condition"],
                          "service_completed_successfully")
         helper = services["api-storage-init"]
@@ -208,10 +200,10 @@ class InfraConfigTests(unittest.TestCase):
             self.assertTrue(services[name]["image"].endswith(":staging"))
         mounts = services["postgres"]["volumes"]
         wrapper = next(mount for mount in mounts if mount["target"] == "/usr/local/bin/postgres-entrypoint.sh")
-        self.assertEqual(wrapper["source"], str(INFRA.parent / "files/postgres-entrypoint.sh"))
+        self.assertEqual(wrapper["source"], str(INFRA / "docker/postgres-entrypoint.sh"))
         self.assertEqual(wrapper["type"], "bind")
         self.assertTrue(wrapper["read_only"])
-        self.assertFalse(wrapper["bind"]["create_host_path"])
+        self.assertFalse(wrapper["bind"].get("create_host_path", False))
         data = next(mount for mount in mounts if mount["target"] == "/var/lib/postgresql")
         self.assertEqual((data["type"], data["source"]), ("volume", "postgres-data"))
 
@@ -258,8 +250,7 @@ class InfraConfigTests(unittest.TestCase):
     def test_postgres_final_readiness(self):
         bindir = self.work / "bin"
         bindir.mkdir()
-        # initdb's temporary server accepts Unix sockets immediately; the real TCP
-        # endpoint becomes ready only on the third probe. CREATE must never run early.
+        # Create the database only after TCP is ready.
         implementations = {
             "docker-entrypoint.sh": '''#!/usr/bin/env python3
 import os,pathlib,time
@@ -410,22 +401,21 @@ if any('CREATE DATABASE' in arg for arg in sys.argv): (work/'created').touch()
             for key in keys:
                 self.assertEqual(rendered["services"][service]["environment"][key], values[key])
 
-    def test_dokploy_staging_workflows(self):
+    def test_staging_workflows(self):
         bindir = self.work / "workflow-bin"
         bindir.mkdir()
-        request = self.work / "dokploy-request.json"
-        curl = bindir / "curl"
-        curl.write_text('''#!/usr/bin/env python3
-import json, os, pathlib, sys
-pathlib.Path(os.environ['DOKPLOY_TRACE']).write_text(json.dumps(sys.argv[1:]))
-sys.exit(int(os.environ.get('CURL_EXIT', '0')))
-''')
-        curl.chmod(0o755)
-        values = {"DOKPLOY_URL": "https://deploy.example.invalid/", "DOKPLOY_API_KEY": "synthetic-api-key",
-                  "DOKPLOY_STAGING_COMPOSE_ID": 'compose "quoted" \\ $(touch injected)'}
+        request = self.work / "ssh-request.json"
+        ssh = bindir / "ssh"
+        ssh.write_text("#!/usr/bin/env python3\n"
+                       "import json, os, pathlib, sys\n"
+                       "pathlib.Path(os.environ['SSH_TRACE']).write_text(json.dumps(sys.argv[1:]))\n"
+                       "sys.exit(int(os.environ.get('SSH_EXIT', '0')))\n")
+        ssh.chmod(0o755)
+        values = {"DEPLOY_HOST": "staging.example.invalid", "DEPLOY_PORT": "22", "DEPLOY_USER": "deployer",
+                  "DEPLOY_SSH_KEY": 'synthetic-key $(touch injected)',
+                  "DEPLOY_SSH_KNOWN_HOSTS": "staging.example.invalid ssh-ed25519 synthetic"}
         environment = cli_environment() | values | {"PATH": str(bindir) + ":" + os.environ["PATH"],
-                                                    "DOKPLOY_TRACE": str(request), "GITHUB_SHA": NEW_SHA,
-                                                    "GITHUB_REPOSITORY": "typeitorg/bemol-synthetic"}
+                                                    "SSH_TRACE": str(request), "RUNNER_TEMP": str(self.work)}
         for repo in (API, UI):
             workflow = (repo / ".github/workflows/deploy-staging.yaml").read_text()
             deploy = job(workflow, "deploy-staging")
@@ -436,22 +426,17 @@ sys.exit(int(os.environ.get('CURL_EXIT', '0')))
                     self.assertEqual(condition(deploy, event, ref), event == "push" and ref == "staging")
             for key in values:
                 self.assertIn(f"{key}: ${{{{ secrets.{key} }}}}", deploy)
-            for forbidden in ("ssh", "git pull", "make deploy", "API_VERSION", "UI_VERSION", "freshVolumes"):
-                self.assertNotIn(forbidden, deploy)
-            body = run_block(workflow, "Request staging deployment")
-            self.assertIn("--proto '=https'", body)
+            self.assertNotIn("DOKPLOY_", deploy)
+            self.assertNotIn("ssh-keyscan", deploy)
+            body = run_block(workflow, "Deploy staging over SSH")
             result = command(["bash", "-e", "-o", "pipefail", "-c", body], self.work, environment)
             args = json.loads(request.read_text())
-            self.assertIn("https://deploy.example.invalid/api/compose.deploy", args)
-            for flag in ("--fail", "--silent", "--show-error"):
-                self.assertIn(flag, args)
-            self.assertEqual(args[args.index("--request") + 1], "POST")
-            self.assertIn("x-api-key: " + values["DOKPLOY_API_KEY"], args)
-            self.assertIn("Content-Type: application/json", args)
-            self.assertEqual(json.loads(args[args.index("--data") + 1]),
-                             {"composeId": values["DOKPLOY_STAGING_COMPOSE_ID"],
-                              "title": "typeitorg/bemol-synthetic@" + NEW_SHA})
-            self.assertNotIn(values["DOKPLOY_API_KEY"], result.stdout + result.stderr)
+            self.assertIn("StrictHostKeyChecking=yes", args)
+            self.assertIn("BatchMode=yes", args)
+            self.assertEqual(args[args.index("-p") + 1], "22")
+            self.assertEqual(args[-2], "deployer@staging.example.invalid")
+            self.assertEqual(args[-1], "cd /opt/bemol-infra && exec bash scripts/deploy-staging.sh")
+            self.assertNotIn(values["DEPLOY_SSH_KEY"], result.stdout + result.stderr)
             self.assertFalse((self.work / "injected").exists())
             for missing in values:
                 request.unlink(missing_ok=True)
@@ -460,20 +445,27 @@ sys.exit(int(os.environ.get('CURL_EXIT', '0')))
                 self.assertNotEqual(rejected.returncode, 0)
                 self.assertFalse(request.exists())
             failed = command(["bash", "-e", "-o", "pipefail", "-c", body], self.work,
-                             environment | {"CURL_EXIT": "22"}, False)
-            self.assertEqual(failed.returncode, 22)
+                             environment | {"SSH_EXIT": "255"}, False)
+            self.assertEqual(failed.returncode, 255)
 
     def test_documented_contract(self):
-        template = (INFRA / ".env.dokploy.staging.example").read_text()
+        output = self.work / "rendered-staging"
+        command(["python3", str(INFRA / "scripts/render-staging-config.py"),
+                 "--output-dir", str(output)], INFRA)
+        template = (output / ".env.staging.example").read_text()
         values = dict(line.split("=", 1) for line in template.splitlines() if line and not line.startswith("#"))
-        self.assertEqual(values["INSTITUTIONAL_BASE_DOMAIN"], "staging.typeit.com.ar")
-        self.assertEqual(values["WEBAUTHN_RP_ID"], "staging.typeit.com.ar")
-        self.assertEqual(values["WEBAUTHN_ALLOWED_ORIGINS"], "https://staging.typeit.com.ar")
+        public_config = (INFRA / "deploy/staging.env").read_text()
+        settings = dict(line.split("=", 1) for line in public_config.splitlines()
+                        if line and not line.startswith("#"))
+        domain = settings["STAGING_SUBDOMAIN"] + "." + settings["BASE_DOMAIN"]
+        self.assertEqual(values["INSTITUTIONAL_BASE_DOMAIN"], domain)
+        self.assertEqual(values["WEBAUTHN_RP_ID"], domain)
+        self.assertEqual(values["WEBAUTHN_ALLOWED_ORIGINS"], "https://" + domain)
         for key in ("DB_PASSWORD", "JWT_SECRET", "REFRESH_REPLAY_ENCRYPTION_KEY"):
             self.assertIn(key, values)
-        self.assertIn("Dokploy", (INFRA / "docs/DOKPLOY-STAGING.md").read_text())
-        for removed in ("compose.staging.yaml", "compose.production.yaml", ".env.example",
-                        "docs/STAGING.md", "docs/PRODUCTION.md", "deploy/nginx",
+        self.assertIn("SSH", (INFRA / "docs/STAGING.md").read_text())
+        for removed in ("compose.production.yaml", ".env.example",
+                        "docs/PRODUCTION.md", "deploy/nginx",
                         "scripts/bootstrap.sh", "scripts/prepare-volumes.sh", "scripts/deploy-service.sh",
                         "scripts/rollback-service.sh"):
             self.assertFalse((INFRA / removed).exists(), removed)
@@ -508,7 +500,7 @@ if __name__ == "__main__":
         evidence.parent.mkdir(parents=True, exist_ok=True)
         report = evidence.with_name("infra-config-report.json")
         report.write_text(json.dumps({"tests": result.statuses, "output": output.getvalue(), "commands": COMMANDS,
-                                      "boundary": "Compose config, mocked backups and HTTPS deploy requests; no live deployment"}, indent=2))
+                                      "boundary": "Compose config, mocked backups and SSH deployments; no live deployment"}, indent=2))
         cases = {case: {"status": "passed" if all(result.statuses.get(test) == "passed" for test in tests) else "failed",
                         "artifact": str(report)} for case, tests in CASE_TESTS.items()}
         evidence.write_text(json.dumps(cases, indent=2))
