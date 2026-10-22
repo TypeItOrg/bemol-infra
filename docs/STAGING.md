@@ -1,8 +1,8 @@
 # Bemol / staging: Compose, SSH y Traefik
 
-La rama `main` corresponde a producción y `staging` a la infraestructura de este
-VPS. Esta actualización no aprovisiona ni despliega producción. Para operar el
-VPS, usar un checkout de `staging`, nunca `main`.
+`staging` es la rama principal y versiona la infraestructura de este VPS.
+Producción no está configurada; `main` se creará cuando se prepare ese entorno.
+Para operar el VPS, usar un checkout de `staging`.
 
 Staging es el único ambiente compartido configurado en esta rama. El
 despliegue usa Docker Compose por SSH, sin Dokploy. Desarrollo local, Dockerfiles

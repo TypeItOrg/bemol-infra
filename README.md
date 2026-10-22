@@ -32,9 +32,9 @@
 
 ## Ramas y entornos
 
-- `main` corresponde a producción; esta actualización no la aprovisiona ni la despliega.
-- `staging` versiona la configuración instalada en el VPS de staging.
-- Para operar staging, usa un checkout de la rama `staging`; no despliegues desde `main`.
+- `staging` es la rama principal y versiona la configuración instalada en el VPS.
+- Producción no está configurada; `main` se creará cuando se prepare ese entorno.
+- Para operar el VPS, usa un checkout de la rama `staging`.
 
 ## Operación de staging
 
