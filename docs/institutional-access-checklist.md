@@ -13,12 +13,12 @@ solo despliegues remotos, cambios de producción, commits ni pushes.
 - Logos PNG/JPEG, máximo 2 MiB, administrados por plataforma o por una institución
   con `INSTITUTION_UPDATE`; almacenamiento y autorizaciones existentes se conservan.
 - Accesos generales conservan selector. Los institucionales fijan contexto, nombre
-  y logo. El contrato actual reconoce `cboero.staging.bemol.com.ar`, pero el nuevo
-  dominio todavía no tiene DNS, certificado ni routing institucional aprovisionados.
-  El formato objetivo `cboero-staging.bemol.com.ar` requiere cambios de API/UI;
-  `cboero.bemol.com.ar` corresponde a una activación futura de producción.
-  `cboero.testing.bemol.com.ar` queda únicamente como hostname sintético de los
-  fixtures locales. Este contrato no acredita acceso público a esos hostnames.
+  y logo. El contrato actual reconoce `cboero.staging.bemol.com.ar`. En staging se
+  prepara con wildcard DNS-only y TLS wildcard en Traefik, sin Cloudflare; la
+  verificación operativa queda pendiente. `cboero.bemol.com.ar` corresponde a una
+  activación futura de producción. `cboero.testing.bemol.com.ar` queda únicamente
+  como hostname sintético de los fixtures locales. Este contrato no acredita acceso
+  público a esos hostnames.
 
 ## Requisitos obligatorios
 

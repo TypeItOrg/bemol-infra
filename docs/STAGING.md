@@ -121,8 +121,29 @@ El acceso general es **`staging.bemol.com.ar`** y el dashboard protegido usa
 hacia el VPS; el modo requerido es **Full (strict)**. El token DNS no permite leer
 ese ajuste global: comprobarlo en el panel, sin cambiar toda la zona por iniciativa.
 DNS no configura Traefik ni emite certificados.
-No añadir AAAA sin IPv6 operativo, aliases, `www`, wildcard ni rutas institucionales
-para resolver un problema del acceso general.
+No añadir AAAA sin IPv6 operativo, aliases, `www` ni wildcard para resolver un
+problema del acceso general. El wildcard institucional es una ruta separada y
+DNS-only; no debe usarse para el acceso general.
+
+### Acceso institucional DNS-only
+
+Los hosts `<institucion>.staging.bemol.com.ar` usan el wildcard
+**`*.staging.bemol.com.ar` en modo DNS only** hacia el VPS. Cloudflare no termina
+TLS ni aplica WAF, rate limit o Full (strict) a ese tráfico. Traefik sirve un
+certificado wildcard `*.staging.bemol.com.ar` emitido con el resolver DNS-01
+`cloudflare-staging`; el certificado exacto de `staging.bemol.com.ar` no cubre
+esos hosts.
+
+El tráfico institucional llega directo al origen: la IP del VPS queda pública
+para esos nombres y los límites se aplican por IP real, no por `CF-Connecting-IP`.
+Los routers institucionales no llevan `bemol-cloudflare-only`. Es una excepción
+deliberada de staging; el acceso general y el dashboard siguen proxied y no deben
+mezclarse con esta ruta.
+
+El primer reload del file provider inicia el desafío DNS-01 del wildcard. No
+recrear Traefik durante el desafío, no borrar TXT ajenos y no resetear el almacén
+ACME. Verificar después que el DNS resuelve al VPS, que el certificado es el
+wildcard y que login/passkeys funcionan en un host institucional.
 
 `deploy/traefik/traefik-static.staging.example.yaml` es una configuración estática
 completa: entradas 80/443, forwarded headers confiados sólo desde rangos Cloudflare,
@@ -246,12 +267,14 @@ de rutas privadas y origen directo, logs y backup/timer. Si cambia almacenamient
 comprobar carga/descarga autorizadas con datos descartables. No afirmar pruebas de
 registro, login, correo, adjuntos o restauración si sólo se revisaron healthchecks.
 
-API/UI aún construyen `<institucion>.staging.bemol.com.ar`; no hay DNS, TLS ni router
-institucional aprovisionado. El objetivo `<institucion>-staging.bemol.com.ar` requiere
-otra etapa de aplicación e infraestructura. No habilitarlo con un wildcard como
-atajo. El RP actual es `staging.bemol.com.ar`; las passkeys del dominio retirado
-necesitan registro nuevo. Se conserva el remitente SMTP existente según la decisión
-del usuario; no se acredita un remitente nuevo por actualizar el dominio general.
+API/UI construyen `<institucion>.staging.bemol.com.ar`. La configuración versionada
+ya incluye el wildcard DNS-only, el certificado wildcard de Traefik y los routers
+institucionales, pero no se considera operativa hasta verificarla en el host:
+resolución directa al VPS, certificado wildcard, router, login y passkeys. El
+tráfico institucional evita Cloudflare y no hereda WAF ni límites de edge. El RP
+actual es `staging.bemol.com.ar`; las passkeys del dominio retirado necesitan
+registro nuevo. Se conserva el remitente SMTP existente según la decisión del
+usuario; no se acredita un remitente nuevo por actualizar el dominio general.
 
 El [contrato de aceptación local](institutional-access-checklist.md) utiliza fixtures
 descartables y no acredita el VPS. El [registro de renombre](RENOMBRE-BEMOL.md)
