@@ -1,4 +1,3 @@
-
 <!-- Banner -->
 <p align="center">
 <img width="2172" height="724" alt="bemol_banner_logo_pua_original" src="https://github.com/user-attachments/assets/2523e8dd-3399-4b8b-bae3-5dd62ba7b039" />
@@ -29,22 +28,3 @@
   consultar información académica y dar seguimiento a los distintos procesos institucionales,
   mejorando la organización y facilitando la gestión cotidiana.
 </p>
-
-## Ramas y entornos
-
-- `staging` es la rama principal y versiona la configuración instalada en el VPS.
-- Producción no está configurada; `main` se creará cuando se prepare ese entorno.
-- Para operar el VPS, usa un checkout de la rama `staging`.
-
-## Operación de staging
-
-- [Despliegues por SSH, variables y datos](docs/STAGING.md).
-- [Reglas públicas de Traefik](deploy/traefik/traefik-staging.yaml) y [configuración estática de referencia](deploy/traefik/traefik-static.staging.example.yaml).
-- [Compose base de la aplicación](compose.yaml) y [diferencias de staging](compose.staging.yaml).
-- [Compose del proxy Traefik independiente](compose.proxy.yaml).
-
-`make deploy-staging` valida el entorno privado, descarga las imágenes de aplicación,
-crea y valida un backup de PostgreSQL y actualiza los contenedores. Los cinco
-volúmenes de datos existentes son externos y no se crean implícitamente.
-Traefik usa archivos privados de `/etc/bemol/traefik`, sin socket de Docker;
-su dashboard requiere autenticación propia.
