@@ -28,16 +28,3 @@
   consultar información académica y dar seguimiento a los distintos procesos institucionales,
   mejorando la organización y facilitando la gestión cotidiana.
 </p>
-
-## Operación de staging
-
-Con `.env.staging` configurado y los requisitos del host preparados:
-
-- **Primera instalación en un destino vacío:** `make init`.
-- **Actualizaciones de una instalación existente:** `make deploy`.
-- **Backup manual, independiente del despliegue:** `make backup-db`.
-
-`make init` rechaza recursos existentes; no reemplaza una restauración de datos.
-Ni la instalación inicial ni los despliegues ejecutan backups.
-Ver [requisitos, instalación inicial y despliegue](docs/STAGING.md) y
-[configuración de Nginx y Certbot](docs/NGINX-STAGING.md).
