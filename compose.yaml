@@ -1,5 +1,3 @@
-# Shared service definitions for staging.
-# Staging merges compose.staging.yaml over this file.
 name: bemol
 
 services:
@@ -10,12 +8,23 @@ services:
     ports:
       - "127.0.0.1:${UI_HOST_PORT:-3000}:3000"
     environment:
-      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?AUTH_COOKIE_SECURE is required}
+      # =============================================================================
+      # Application
+      # =============================================================================
       BEMOL_API_URL: http://api:8080
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-}
-      INSTITUTIONAL_BASE_DOMAIN: ${INSTITUTIONAL_BASE_DOMAIN:-}
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
+
+      # =============================================================================
+      # Authentication & Security
+      # =============================================================================
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?AUTH_COOKIE_SECURE is required}
+
+      # =============================================================================
+      # Institutions
+      # =============================================================================
+      INSTITUTIONAL_BASE_DOMAIN: ${INSTITUTIONAL_BASE_DOMAIN:-}
     depends_on:
       api:
         condition: service_healthy
@@ -45,27 +54,45 @@ services:
     ports:
       - "127.0.0.1:${API_HOST_PORT:-8080}:8080"
     environment:
+      # =============================================================================
+      # Application
+      # =============================================================================
       SERVER_PORT: 8080
-      STORAGE_LOCAL_DIR: /app/storage
-      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
-      STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-}
-      STORAGE_S3_PREFIX: ${STORAGE_S3_PREFIX:-bemol/}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
-      DB_HOST: postgres
-      DB_PORT: 5432
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      REFRESH_REPLAY_ENCRYPTION_KEY: ${REFRESH_REPLAY_ENCRYPTION_KEY:?REFRESH_REPLAY_ENCRYPTION_KEY is required}
-      REFRESH_REPLAY_TTL: ${REFRESH_REPLAY_TTL:-5s}
-      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?WEBAUTHN_RP_ID is required}
-      WEBAUTHN_ALLOWED_ORIGINS: ${WEBAUTHN_ALLOWED_ORIGINS:?WEBAUTHN_ALLOWED_ORIGINS is required}
+      FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=70.0 -XX:+ExitOnOutOfMemoryError}
+
+      # =============================================================================
+      # Database
+      # =============================================================================
       DB_NAME: ${DB_NAME:?DB_NAME is required}
       DB_USER: ${DB_USER:?DB_USER is required}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_HOST: postgres
+      DB_PORT: 5432
+
+      # =============================================================================
+      # Cache
+      # =============================================================================
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # =============================================================================
+      # Authentication & Security
+      # =============================================================================
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      REFRESH_REPLAY_ENCRYPTION_KEY: ${REFRESH_REPLAY_ENCRYPTION_KEY:?REFRESH_REPLAY_ENCRYPTION_KEY is required}
+      REFRESH_REPLAY_TTL: ${REFRESH_REPLAY_TTL:-5s}
+
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?WEBAUTHN_RP_ID is required}
+      WEBAUTHN_ALLOWED_ORIGINS: ${WEBAUTHN_ALLOWED_ORIGINS:?WEBAUTHN_ALLOWED_ORIGINS is required}
+
+      EMAIL_VERIFICATION_FRONTEND_URL: ${EMAIL_VERIFICATION_FRONTEND_URL:-${PASSWORD_RECOVERY_FRONTEND_URL}}
+      PASSWORD_RECOVERY_FRONTEND_URL: ${PASSWORD_RECOVERY_FRONTEND_URL:?PASSWORD_RECOVERY_FRONTEND_URL is required}
+      PASSWORD_RECOVERY_TOKEN_EXPIRATION: ${PASSWORD_RECOVERY_TOKEN_EXPIRATION:-30m}
+
+      # =============================================================================
+      # Email
+      # =============================================================================
       MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is required}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:?MAIL_USERNAME is required}
@@ -73,14 +100,31 @@ services:
       MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
       MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-true}
       MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is required}
-      FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-}
+
+      # =============================================================================
+      # Institutions
+      # =============================================================================
       INSTITUTIONAL_BASE_DOMAIN: ${INSTITUTIONAL_BASE_DOMAIN:-}
-      EMAIL_VERIFICATION_FRONTEND_URL: ${EMAIL_VERIFICATION_FRONTEND_URL:-${PASSWORD_RECOVERY_FRONTEND_URL}}
-      PASSWORD_RECOVERY_FRONTEND_URL: ${PASSWORD_RECOVERY_FRONTEND_URL:?PASSWORD_RECOVERY_FRONTEND_URL is required}
-      PASSWORD_RECOVERY_TOKEN_EXPIRATION: ${PASSWORD_RECOVERY_TOKEN_EXPIRATION:-30m}
+
+      # =============================================================================
+      # Administration
+      # =============================================================================
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:-}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
-      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=70.0 -XX:+ExitOnOutOfMemoryError}
+
+      # =============================================================================
+      # Storage
+      # =============================================================================
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
+      STORAGE_LOCAL_DIR: /app/storage
+
+      STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-}
+      STORAGE_S3_PREFIX: ${STORAGE_S3_PREFIX:-bemol/}
+
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,7 +146,14 @@ services:
     cpus: ${API_CPU_LIMIT:-1.0}
     logging: *logging
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health/readiness"]
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "http://localhost:8080/actuator/health/readiness",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -137,7 +188,8 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    command:
+      ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     restart: unless-stopped
     expose:
       - "6379"
@@ -157,10 +209,13 @@ services:
     image: postgres:18-alpine
     command: ["/bin/sh", "/usr/local/bin/postgres-entrypoint.sh"]
     environment:
+      # =============================================================================
+      # Database
+      # =============================================================================
       DB_NAME: ${DB_NAME:?DB_NAME is required}
-      POSTGRES_DB: postgres
       POSTGRES_USER: ${DB_USER:?DB_USER is required}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: postgres
     expose:
       - "5432"
     volumes:
@@ -189,11 +244,15 @@ services:
 volumes:
   ui-next-cache:
     external: true
+
   postgres-data:
     external: true
+
   redis-data:
     external: true
+
   api-logs:
     external: true
+
   api-storage:
     external: true

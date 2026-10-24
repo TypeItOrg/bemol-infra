@@ -1,18 +1,32 @@
-# Merge over compose.yaml; never deploy the shared base on its own.
 name: bemol-staging
 
 services:
   ui:
     environment:
+      # =============================================================================
+      # Application
+      # =============================================================================
       DEPLOYMENT_ENV: staging
+
+      # =============================================================================
+      # Authentication & Security
+      # =============================================================================
       AUTO_LOGIN_ENABLED: ${AUTO_LOGIN_ENABLED:-false}
 
   api:
     environment:
+      # =============================================================================
+      # Application
+      # =============================================================================
       SPRING_PROFILES_ACTIVE: staging
+
+      # =============================================================================
+      # Authentication & Security
+      # =============================================================================
       AUTO_LOGIN_ENABLED: ${AUTO_LOGIN_ENABLED:-false}
       AUTO_LOGIN_USER_ID: ${AUTO_LOGIN_USER_ID:-}
       AUTO_LOGIN_INSTITUTION_ID: ${AUTO_LOGIN_INSTITUTION_ID:-}
+
     depends_on:
       api-storage-init:
         condition: service_completed_successfully
@@ -23,19 +37,18 @@ services:
 
 volumes:
   ui-next-cache:
-    external: true
     name: bemol-ui-next-cache-staging
+
   postgres-data:
-    external: true
     name: bemol-api-postgres-data-staging
+
   redis-data:
-    external: true
     name: bemol-api-redis-data-staging
+
   api-logs:
-    external: true
     name: bemol-api-logs-staging
+
   api-storage:
-    external: true
     name: bemol-api-enrollment-storage-staging
 
 networks:
