@@ -1,2 +1,1 @@
-# Private copy: /etc/letsencrypt/cloudflare.ini, root-owned and mode 600.
-dns_cloudflare_api_token = replace-with-existing-zone-scoped-token
+dns_cloudflare_api_token =
