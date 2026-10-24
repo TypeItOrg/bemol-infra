@@ -21,10 +21,6 @@ services:
     profiles: !reset []
     pull_policy: always
 
-  postgres:
-    environment:
-      DB_REQUIRE_EXISTING: "true"
-
 volumes:
   ui-next-cache:
     external: true

@@ -41,9 +41,51 @@ triggers, nombres de secrets y permisos efectivos. El host necesita acceso de
 lectura a GHCR; no colocar credenciales de registro en Compose ni en Git.
 Un push a infraestructura no sincroniza por sí solo los archivos privados del VPS.
 
-## Desplegar la aplicación
+## Primera instalación en un VPS nuevo
 
-Desde el checkout operativo de la rama `staging`, el único entrypoint de deploy es:
+Este procedimiento crea una base **vacía**; no migra ni restaura otro staging.
+Confirmar el host y contexto Docker antes de iniciarlo. No usarlo si corresponde
+conservar datos de una instalación anterior.
+
+Requisitos del host:
+
+- Docker Engine y Compose con soporte para `!reset`, `make`, Bash y `flock`.
+- Checkout de `staging` en `/opt/bemol-infra` y acceso de lectura a las imágenes GHCR.
+- Una identidad de despliegue con acceso a Docker y lectura de `.env.staging`.
+  Los despliegues siguientes y el timer deben usar esa misma identidad.
+- `.env.staging` completo, con permiso `0600`, versiones publicadas y secretos
+  nuevos para esta instalación; no reemplazar credenciales de otra instalación.
+- Los cinco volúmenes y la red de staging enumerados abajo no deben existir,
+  ni debe haber contenedores del proyecto `bemol-staging`.
+
+Desde el checkout, con la identidad de despliegue:
+
+```sh
+cd /opt/bemol-infra
+make init
+```
+
+Equivale a `bash scripts/deploy-staging.sh --init`. El mismo lock de despliegue
+protege la operación completa. Primero valida la configuración y rechaza recursos
+existentes; después descarga las imágenes y crea los volúmenes y la red externos.
+Luego arranca el stack con la misma configuración del despliegue habitual.
+PostgreSQL crea la base configurada si falta y reutiliza una existente sin borrarla
+ni reemplazarla. Su healthcheck exige una consulta SQL exitosa sobre esa base por
+TCP antes de permitir el arranque de API. No modifica `.env.staging` ni ejecuta backups.
+
+El modo inicial no se utiliza en actualizaciones ni en los workflows.
+Nginx, Certbot, DNS, el usuario de despliegue y el timer de backup se preparan por
+separado; `make init` instala el stack de aplicación, no configura el host.
+
+Si falla tras crear recursos, se conservan los volúmenes, contenedores y sus datos;
+no se eliminan recursos ni se restaura nada automáticamente. No repetir `make init`
+ni borrar volúmenes para forzarlo: inspeccionar el estado, corregir la causa y
+continuar con `make deploy`. En un fallo posterior a las migraciones, preservar
+también los nuevos datos antes de decidir una recuperación.
+
+## Desplegar una instalación existente
+
+Desde el checkout operativo de la rama `staging`, el entrypoint de actualización es:
 
 ```sh
 cd /opt/bemol-infra
@@ -63,15 +105,15 @@ sin aceptar automáticamente una clave obtenida de la red.
 
 Deploy y backup programado usan el usuario `staging`, miembro de `docker`.
 No alternar con root: el lock compartido en `/tmp` y los archivos privados deben
-seguir siendo accesibles por esa identidad. El timer instala `User=staging` y
-`Group=staging`; mantener `/var/backups/bemol` con grupo `staging` y permiso `0710`,
-y su subdirectorio `staging` propiedad de ese usuario, permiso `0700`.
+seguir siendo accesibles por esa identidad. Los permisos de backup se preparan
+por separado y no son un requisito para desplegar.
 
 El script toma `/tmp/bemol-infra-staging.lock`, comprueba el Compose y descarga
-únicamente UI, API y el auxiliar `api-storage-init`. Crea un dump PostgreSQL
-validado antes de aplicar el stack con `up --wait`, hasta 900
+únicamente UI, API y el auxiliar `api-storage-init`. Aplica el stack con
+`up --wait`, hasta 900
 segundos, y `--pull never`: no actualiza PostgreSQL/Redis como efecto secundario de
-publicar una aplicación. No borrar el archivo de lock para forzar un deploy.
+publicar una aplicación. No ejecuta backups ni exige un PostgreSQL ya arrancado
+para respaldarlo antes del despliegue. No borrar el archivo de lock para forzar un deploy.
 
 Un exit code exitoso exige healthchecks del stack; completar además la comprobación
 HTTPS y la función afectada. Un fallo deja visible el error, sin restauración ni
@@ -106,8 +148,11 @@ conocidas; no usar tags móviles si no se desea actualizar código.
 | `bemol-api-logs-staging` | Logs de API, `/app/logs` |
 | `bemol-ui-next-cache-staging` | Caché Next, `/app/.next/cache` |
 
-Si falta un volumen, detenerse; no crear una base vacía. PostgreSQL exige que
-`DB_NAME` ya exista y monta el entrypoint versionado de `docker/` en sólo lectura.
+En actualizaciones, si falta un volumen, detenerse; no crear una base vacía.
+Sólo `make init` crea recursos para una primera instalación autorizada.
+PostgreSQL crea `DB_NAME` si falta y conserva una base existente; no comprueba que
+contenga datos. Un nombre incorrecto puede crear otra base vacía. El entrypoint
+versionado de `docker/` se monta en sólo lectura.
 No ejecutar dos PostgreSQL sobre el mismo volumen. `api-storage-init` prepara los
 permisos de archivos antes de iniciar API; su éxito no prueba una carga/descarga.
 
@@ -189,11 +234,17 @@ como efecto secundario de una actualización.
 
 ## Backups y rollback limitado
 
-El backup diario es independiente del proxy. `bemol-backup@staging.timer` ejecuta
+Los backups son independientes del despliegue y del proxy. `make backup-db` permite
+solicitar uno manualmente. El timer `bemol-backup@staging.timer` ejecuta
 `make backup-db ENV=staging` en `/opt/bemol-infra`, a las 02:15 del reloj del servidor,
 con hasta 15 minutos aleatorios y recuperación de ejecuciones perdidas.
 El helper selecciona exactamente un PostgreSQL vivo por volumen y label de servicio;
 no depende de nombres efímeros de contenedor.
+
+El timer instala `User=staging` y `Group=staging`; para usar backups, mantener
+`/var/backups/bemol` con grupo `staging` y permiso `0710`, y su subdirectorio
+`staging` propiedad de ese usuario, permiso `0700`. Estos directorios no son
+necesarios para `make init` ni `make deploy`.
 
 Los dumps quedan por defecto en `/var/backups/bemol/staging`, permisos `0600`,
 retención de siete días. `BACKUP_DIR` y `BACKUP_RETENTION_DAYS` permiten cambiar esos
@@ -203,7 +254,8 @@ esa validación **no** es un ensayo de restauración. Revisar el timer y
 
 PostgreSQL no respalda los adjuntos. Antes de un corte destructivo, preservar y
 validar también los archivos locales o el destino S3 activo, según corresponda.
-El deploy normal sólo automatiza el dump DB. Mantener una copia fuera del host:
+Ni `make init` ni `make deploy` crean un dump ni un punto de recuperación previo
+a cada cambio. Mantener una copia fuera del host cuando se requieran backups:
 el backup en el mismo disco no cubre pérdida del VPS.
 
 Por decisión del usuario no se conserva configuración histórica de Dokploy ni un
@@ -217,7 +269,8 @@ No usar `down -v`, `docker system prune`, ni borrar volúmenes para arreglar un 
 
 Tras un cambio autorizado, comprobar estado y healthchecks de Compose, mounts,
 imágenes efectivas, HTTPS general y login de plataforma, redirección HTTP, denegación
-de rutas privadas y origen directo, logs y backup/timer. Si cambia almacenamiento,
+de rutas privadas y origen directo y logs. Revisar backup/timer cuando sean parte
+del cambio solicitado. Si cambia almacenamiento,
 comprobar carga/descarga autorizadas con datos descartables. No afirmar pruebas de
 registro, login, correo, adjuntos o restauración si sólo se revisaron healthchecks.
 

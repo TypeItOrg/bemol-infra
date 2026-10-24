@@ -172,7 +172,11 @@ services:
         bind:
           create_host_path: false
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:?DB_USER is required} -d ${DB_NAME:?DB_NAME is required}"]
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$${POSTGRES_PASSWORD}" psql -h 127.0.0.1
+          -U "$${POSTGRES_USER}" -d "$${DB_NAME}" -w -tAc 'SELECT 1' >/dev/null
       interval: 10s
       timeout: 5s
       retries: 5

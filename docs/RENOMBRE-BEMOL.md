@@ -91,9 +91,9 @@ de ubicación requiere actualizar las integraciones y rutas del host por separad
 | `/opt/boero-infra`, `/var/backups/boero/staging` | `/opt/bemol-infra`, `/var/backups/bemol/staging` |
 
 Compose exige volúmenes y red **externos**: si faltan los destinos, debe fallar;
-no crearlos vacíos como sustitutos de datos que deban conservarse. Staging configura
-`DB_REQUIRE_EXISTING=true`: el wrapper PostgreSQL rechaza una base ausente en vez
-de crearla. Actualizar también su **File Mount** en Dokploy antes del corte; un
+no crearlos vacíos como sustitutos de datos que deban conservarse. Durante el corte
+se exigía una base existente; el arranque actual reutiliza la base o la crea si
+falta. No usarlo para sustituir una restauración pendiente. Actualizar también su **File Mount** en Dokploy antes del corte; un
 push no reemplaza ese archivo gestionado. Los fixtures locales descartables sí
 pueden crear su base; no usan las identidades persistentes de staging.
 
@@ -112,9 +112,9 @@ autoriza producción, borrados globales, publicaciones Git o cambios de polític
    Retirar únicamente sus recursos inventariados; nunca usar prune ni limpiar
    volúmenes ajenos. No respaldar datasets descartables por rutina.
 3. Crear explícitamente los nuevos recursos externos y la base/rol de prueba.
-   Staging conserva `DB_REQUIRE_EXISTING=true`: una primera inicialización requiere
-   aprovisionar la base Bemol antes del arranque normal, no desactivar la protección
-   a ciegas. Conservar las claves JWT/refresh, credenciales y dominios que no se
+   El flujo actual `make init` prepara los recursos en un destino sin recursos
+   staging previos; PostgreSQL crea la base si falta. No reemplaza la migración de
+   datos existentes. Conservar las claves JWT/refresh, credenciales y dominios que no se
    estén renombrando; regenerar datos no exige regenerar secretos.
 4. Usar imágenes/configuración Bemol compatibles y seeders del entorno indicado.
    En remoto, respetar la entrega autorizada Actions/GHCR → Dokploy: disponer de

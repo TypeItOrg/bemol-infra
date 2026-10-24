@@ -5,10 +5,13 @@ $(error ENV must be staging)
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help deploy deploy-staging backup-db
+.PHONY: help init deploy deploy-staging backup-db
 
 help:
-	@printf '%s\n' 'make deploy: validar, respaldar y desplegar staging por Compose.' 'make backup-db: backup PostgreSQL de staging.'
+	@printf '%s\n' 'make init: instalar staging por primera vez en un destino vacío.' 'make deploy: validar y desplegar staging por Compose, sin backup.' 'make backup-db: backup manual PostgreSQL de staging.'
+
+init:
+	bash ./scripts/deploy-staging.sh --init
 
 deploy deploy-staging:
 	bash ./scripts/deploy-staging.sh
