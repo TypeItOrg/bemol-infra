@@ -1,4 +1,7 @@
-# Bemol / staging: Compose, SSH y Traefik
+# Bemol / staging: Compose, SSH, Nginx y Certbot
+
+Nginx + Certbot son el proxy y gestor TLS de staging;
+[configuración y operación](NGINX-STAGING.md).
 
 `staging` es la rama principal y versiona la infraestructura de este VPS.
 Producción no está configurada; `main` se creará cuando se prepare ese entorno.
@@ -17,7 +20,7 @@ para producción ni crear otro ambiente sin autorización.
 
 ```text
 Actions → CI del mismo commit → imágenes GHCR → SSH → deploy-staging.sh
-Navegador → Cloudflare → Traefik → UI → API → PostgreSQL / Redis
+Navegador → Cloudflare (general) o directo (institucional) → Nginx → UI → API → PostgreSQL / Redis
 ```
 
 | Recurso | Fuente / ubicación operativa |
@@ -26,10 +29,11 @@ Navegador → Cloudflare → Traefik → UI → API → PostgreSQL / Redis
 | Aplicación | `compose.yaml` + `compose.staging.yaml`, proyecto `bemol-staging` |
 | Variables privadas de aplicación | `/opt/bemol-infra/.env.staging`, permisos `0600` |
 | Plantilla pública de aplicación | `.env.staging.example` |
-| Proxy independiente | `compose.proxy.yaml`, proyecto `bemol-proxy-staging` |
-| Configuración estática privada | `/etc/bemol/traefik/traefik.yml` |
-| Reglas dinámicas | `/etc/bemol/traefik/dynamic/traefik-staging.yaml` |
-| Entorno privado de Traefik | `/etc/bemol/traefik/traefik.env` |
+| Proxy del host | `nginx.service`, principal `/etc/nginx/nginx.conf` |
+| Configuración por responsabilidad | `deploy/nginx/` → `/etc/bemol/nginx/` |
+| Certificado general + wildcard | `/etc/letsencrypt/live/bemol-staging/` |
+| Credenciales DNS privadas | `/etc/letsencrypt/cloudflare.ini`, root y `0600` |
+| Renovación | `certbot.timer` y hook `deploy/certbot/reload-nginx.sh` |
 
 Los workflows de API/UI publican imágenes de sus ramas `staging` y solicitan el
 mismo comando remoto. Leer sus `.github/workflows/deploy-staging.yaml` para los
@@ -107,131 +111,81 @@ Si falta un volumen, detenerse; no crear una base vacía. PostgreSQL exige que
 No ejecutar dos PostgreSQL sobre el mismo volumen. `api-storage-init` prepara los
 permisos de archivos antes de iniciar API; su éxito no prueba una carga/descarga.
 
-`bemol-network-staging` conecta los servicios de aplicación. Sólo UI entra además
-a `bemol-proxy-staging` con alias `bemol-ui-staging`; API, DB y Redis no pertenecen
-a la red pública del proxy. UI no publica puerto de host. API permanece accesible
-únicamente por loopback para mantenimiento; PostgreSQL/Redis no publican puertos.
-El proxy publica solamente `80` y `443`, sin puerto de dashboard `8080` ni socket
-Docker montado. El dashboard usa un hostname HTTPS propio y autenticación.
+`bemol-network-staging` conecta los servicios de aplicación. UI publica sólo
+`127.0.0.1:3000`, que utiliza el upstream del Nginx instalado en el host.
+API permanece en `127.0.0.1:8080` para mantenimiento y en la red interna para
+Next.js; PostgreSQL/Redis no publican puertos. Nginx en el host es quien escucha en `80` y `443`.
 
 ## Proxy y HTTPS
 
-El acceso general es **`staging.bemol.com.ar`** y el dashboard protegido usa
-**`traefik-staging.bemol.com.ar`**. Ambos tienen un registro A proxied en Cloudflare
-hacia el VPS; el modo requerido es **Full (strict)**. El token DNS no permite leer
-ese ajuste global: comprobarlo en el panel, sin cambiar toda la zona por iniciativa.
-DNS no configura Traefik ni emite certificados.
-No añadir AAAA sin IPv6 operativo, aliases, `www` ni wildcard para resolver un
-problema del acceso general. El wildcard institucional es una ruta separada y
-DNS-only; no debe usarse para el acceso general.
+El acceso general es **`staging.bemol.com.ar`**, proxied por Cloudflare en modo
+Full (strict). Nginx exige un peer Cloudflare; no alcanza con falsificar
+`CF-Connecting-IP` o `X-Forwarded-For`. Los rangos confiables se mantienen en
+`conf.d/cloudflare.conf`, tanto para restaurar la IP real como para comprobar el
+peer original. No cambiar la política de toda la zona por iniciativa.
 
-### Acceso institucional DNS-only
+Los hosts `<institucion>.staging.bemol.com.ar` usan wildcard **DNS-only** hacia el
+VPS, sin TLS, WAF ni límites del edge de Cloudflare. Nginx los admite directamente
+con certificado wildcard; valida un único nivel de slug DNS. No añadir AAAA sin
+IPv6 operativo, aliases ni `www` para resolver un problema del acceso general.
 
-Los hosts `<institucion>.staging.bemol.com.ar` usan el wildcard
-**`*.staging.bemol.com.ar` en modo DNS only** hacia el VPS. Cloudflare no termina
-TLS ni aplica WAF, rate limit o Full (strict) a ese tráfico. Traefik sirve un
-certificado wildcard `*.staging.bemol.com.ar` emitido con el resolver DNS-01
-`cloudflare-staging`; el certificado exacto de `staging.bemol.com.ar` no cubre
-esos hosts.
+### Archivos separados por responsabilidad
 
-El tráfico institucional llega directo al origen: la IP del VPS queda pública
-para esos nombres y los límites se aplican por IP real, no por `CF-Connecting-IP`.
-Los routers institucionales no llevan `bemol-cloudflare-only`. Es una excepción
-deliberada de staging; el acceso general y el dashboard siguen proxied y no deben
-mezclarse con esta ruta.
+`deploy/nginx/nginx.conf` se instala en `/etc/nginx/nginx.conf`; el árbol completo
+se copia a `/etc/bemol/nginx/`. No se cargan además los viejos includes de
+`/etc/nginx/sites-enabled` y `/etc/nginx/conf.d`. El principal sólo reúne proceso,
+eventos, logs e includes; no contiene toda la política de la aplicación.
 
-El primer reload del file provider inicia el desafío DNS-01 del wildcard. No
-recrear Traefik durante el desafío, no borrar TXT ajenos y no resetear el almacén
-ACME. Verificar después que el DNS resuelve al VPS, que el certificado es el
-wildcard y que login/passkeys funcionan en un host institucional.
+- `conf.d/`: upstream UI, Cloudflare, gzip, política de caché y zonas de límites.
+- `snippets/`: TLS, headers de seguridad, transporte al upstream y rutas privadas.
+- `sites/staging.conf`: hosts general/institucional, redirecciones y rechazos.
 
-`deploy/traefik/traefik-static.staging.example.yaml` es una configuración estática
-completa: entradas 80/443, forwarded headers confiados sólo desde rangos Cloudflare,
-provider de archivos y resolver `cloudflare-staging`. Habilita el dashboard con
-`api.insecure: false`, sin provider Docker. Instalarla como `traefik.yml` conservando
-el contacto ACME real.
+Nginx envía `/api/*` a Next.js, que maneja la sesión y llama internamente a
+Spring. `/api/v1`, `/api/v1/*` y `/actuator*` públicos devuelven `403`. No hay
+upstream público de API. Se conserva `Host` y se reconstruyen los headers de IP
+antes de enviarlos al upstream; no se concatenan headers arbitrarios del cliente.
 
-`deploy/traefik/traefik-staging.yaml` define todos los routers, también el general
-HTTPS y la redirección HTTP. El file provider observa `/etc/traefik/dynamic`; su
-servicio apunta a `http://bemol-ui-staging:3000`. El árbol privado del host se monta
-en `/etc/traefik` y permite escribir el estado ACME.
+Los límites generales son 20 solicitudes/s, burst 100; autenticación 30/min,
+burst 20; concurrencia 50 por cliente y 200 por host, cuerpo máximo 32 MiB.
+El dominio general cuenta por IP. En los institucionales IPv4 cuenta por IP e
+IPv6 por red `/64`, incluidos autenticación y concurrencia. Las zonas Nginx se
+comparten entre workers/rutas; no son contadores separados por router como antes.
 
-El token DNS-01 y el almacenamiento ACME **activos** se conservan al cambiar de
-proxy; no se regeneran, imprimen ni versionan. Son datos operativos vivos, no un
-archivo de configuración histórica. El token tiene Zone:Read y DNS:Edit únicamente
-sobre `bemol.com.ar`. Rutas vistas por el contenedor:
+Las respuestas siguen sin buffering para streaming. La compresión usa gzip.
+No hay caché HTTP compartida en Nginx: Next.js conserva sus propios headers de
+caché, incluidos los de assets versionados. No agregar `expires` global ni caché
+de documentos privados. La caché de sesiones TLS no almacena respuestas HTTP.
+No agregar `add_header` en un `location` sin conservar los headers heredados.
 
-```dotenv
-CF_DNS_API_TOKEN_FILE=/etc/traefik/dynamic/.secrets/cloudflare-dns-token
-```
-
-El resolver guarda su estado en
-`/etc/traefik/dynamic/.secrets/acme-cloudflare-staging.json`. Mantener el directorio
-privado y `.secrets` en `0700`, y entorno, token y JSON en `0600`. No poner secretos
-en YAML dentro del directorio dinámico. Let's Encrypt emite el certificado exacto
-del acceso general y Traefik administra su renovación; no se usa Certbot.
-`propagation.requireAllRNS: false` tolera diferencias entre cachés recursivas sin
-desactivar la comprobación autoritativa ni la validación ACME.
-
-Para aplicar configuración del proxy, copiar los archivos versionados a sus rutas
-privadas sólo con autorización. Los cambios dinámicos se recargan; cambios estáticos
-o de entorno requieren recrear el proxy durante una ventana acordada:
+Tras copiar una modificación autorizada de configuración, analizarla antes de
+recargar. Un `nginx -t` fallido debe detener la operación:
 
 ```sh
-cd /opt/bemol-infra
-docker compose -f compose.proxy.yaml up -d --force-recreate
-docker compose -f compose.proxy.yaml logs --tail 100 traefik
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
-No confundir logs sin errores con renovación ACME comprobada. Verificar certificado
-de origen, cobertura y vencimiento sin omitir la validación TLS.
+### Certificados y renovación
 
-### Dashboard protegido
+Certbot DNS-01 con el plugin Cloudflare gestiona un certificado llamado
+`bemol-staging`, con `staging.bemol.com.ar` y `*.staging.bemol.com.ar`. El token DNS
+existente permanece limitado a la zona; no se guarda en Git ni en `.env.staging`.
+Su INI privado es root y `0600`. No usar `certbot --nginx`: el instalador puede
+reescribir la configuración separada. La emisión inicial se documenta en la guía
+de Nginx; no repetirla en cada deploy.
 
-Abrir **`https://traefik-staging.bemol.com.ar/dashboard/`**, con barra final. Permite
-observar routers, servicios y middlewares; no es un reemplazo de Dokploy para
-editar Compose o desplegar aplicaciones.
+`certbot.timer` ejecuta la renovación. El hook instalado en
+`/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` analiza y recarga Nginx sólo
+si está activo. Para una
+comprobación de renovación **autorizada**, que escribe TXT temporales:
 
-El router HTTPS cubre todo el hostname, incluidos `/dashboard/` y `/api`, y exige
-BasicAuth antes de redirigir la raíz a `/dashboard/`. Mantiene la restricción a
-Cloudflare, los headers y los límites generales de solicitudes y concurrencia.
-El límite de login de la aplicación no se aplica a todos los recursos del panel:
-su polling y assets también consumen solicitudes. HTTP sólo redirige a HTTPS.
-El certificado del panel es exacto y separado del certificado de la aplicación,
-con el mismo resolver DNS-01 `cloudflare-staging`.
+```sh
+sudo certbot renew --cert-name bemol-staging --dry-run --run-deploy-hooks
+```
 
-Las credenciales son exclusivas del dashboard; no reutilizar root ni credenciales
-de Bemol. Instalar el archivo `usuario:hash-bcrypt` como
-`/etc/bemol/traefik/dynamic/.secrets/dashboard-users`, propiedad de root y permisos
-`0600`, dentro de `.secrets` con `0700`. El middleware lo lee como
-`/etc/traefik/dynamic/.secrets/dashboard-users` y elimina `Authorization` antes de
-enviar la solicitud al servicio interno. No guardar usuarios ni hashes en YAML.
-
-Las credenciales iniciales quedan únicamente en
-`/etc/bemol/traefik/dashboard-access`, fuera del directorio dinámico, propiedad de
-root y permisos `0600`; consultarlas por SSH autorizado. No copiarlas a Git, logs
-ni workflows. Crear ambos archivos antes de activar el router y recrear el proxy
-para aplicar `api.dashboard: true`. Comprobar TLS, `401` sin credenciales y con
-credenciales incorrectas, y acceso autenticado tanto al panel como a `/api`.
-
-Si se agrega un hostname TLS al mismo tiempo que se cambia la configuración
-estática, detener primero el proxy antes de copiar ambos archivos e iniciarlo.
-El file provider puede comenzar ACME al ver el router nuevo: recrear el proceso
-durante ese desafío deja un TXT huérfano y puede causar `identical record already
-exists`. No borrar desafíos ajenos ni resetear el almacén ACME; comprobar el emisor
-y el registro exacto antes de una limpieza autorizada.
-
-### Protecciones conservadas y límites
-
-- Se restringe el acceso general a peers Cloudflare antes de confiar en
-  `CF-Connecting-IP`. Los rangos necesitan mantenimiento; no autentican nuestra zona.
-- `/actuator` y `/api/v1` públicos devuelven `403`, sin llegar a UI/API.
-- Se conservan headers, gzip, límites por IP y autenticación, concurrencia y cuerpo
-  de 32 MiB en POST/PUT/PATCH. GET de descargas/SSE queda sin buffering de cuerpo.
-- Los contadores son por router/instancia; no equivalen a un límite global del host.
-  El buffering de escrituras también puede demorar respuestas de Server Actions.
-- La UI puede mostrar la IP del edge en metadatos de sesiones por su uso de
-  `X-Real-IP`; esa diferencia de staging no autoriza a extenderla a producción.
+Verificar timer, resultado de Certbot, recarga y certificado efectivamente
+servido. Logs sin errores no prueban renovación. No borrar TXT ajenos ni resetear
+almacenes ACME. Nginx no publica un dashboard; no modificar DNS ajeno
+como efecto secundario de una actualización.
 
 ## Backups y rollback limitado
 
@@ -259,7 +213,7 @@ No se revierten migraciones Flyway. Una restauración de DB/archivos requiere ot
 plan aprobado, pausar escrituras y preservar datos nuevos antes de reemplazarlos.
 No usar `down -v`, `docker system prune`, ni borrar volúmenes para arreglar un deploy.
 
-## Comprobaciones y acceso institucional pendiente
+## Comprobaciones y aceptación funcional pendiente
 
 Tras un cambio autorizado, comprobar estado y healthchecks de Compose, mounts,
 imágenes efectivas, HTTPS general y login de plataforma, redirección HTTP, denegación
@@ -268,19 +222,19 @@ comprobar carga/descarga autorizadas con datos descartables. No afirmar pruebas 
 registro, login, correo, adjuntos o restauración si sólo se revisaron healthchecks.
 
 API/UI construyen `<institucion>.staging.bemol.com.ar`. La configuración versionada
-ya incluye el wildcard DNS-only, el certificado wildcard de Traefik y los routers
-institucionales, pero no se considera operativa hasta verificarla en el host:
-resolución directa al VPS, certificado wildcard, router, login y passkeys. El
-tráfico institucional evita Cloudflare y no hereda WAF ni límites de edge. El RP
+incluye el wildcard DNS-only, el certificado wildcard de Certbot y los hosts de
+Nginx. Routing, TLS y páginas de acceso se verificaron en el corte; eso no prueba
+los flujos completos de login, refresh, passkeys o adjuntos. El tráfico
+institucional evita Cloudflare y no hereda WAF ni límites de edge. El RP
 actual es `staging.bemol.com.ar`; las passkeys del dominio retirado necesitan
 registro nuevo. Se conserva el remitente SMTP existente según la decisión del
 usuario; no se acredita un remitente nuevo por actualizar el dominio general.
 
-El [contrato de aceptación local](institutional-access-checklist.md) utiliza fixtures
-descartables y no acredita el VPS. El [registro de renombre](RENOMBRE-BEMOL.md)
-documenta una operación pasada, no instrucciones para reinstalar Dokploy ni borrar
-datos. No ejecutar tests, seeds, restauraciones o despliegues adicionales por
-iniciativa al consultar esta guía.
+El [registro de renombre](RENOMBRE-BEMOL.md) documenta una operación pasada,
+no instrucciones para reinstalar componentes retirados ni borrar datos. Este
+repositorio no contiene suites de tests ni harnesses de aceptación; los tests de
+aplicación permanecen en API/UI. No ejecutar seeds, restauraciones o despliegues
+adicionales por iniciativa al consultar esta guía.
 
 ## Corte verificado: 2026-10-22
 
@@ -309,11 +263,9 @@ iniciativa al consultar esta guía.
   registra en la sección siguiente.
 - Se validaron sintaxis, Compose efectivo, salud, HTTPS y persistencia; no suites
   de tests ni flujos completos de registro, correo, passkeys o adjuntos.
-  La aceptación local completa sigue pendiente. Se conserva la prueba de SSH
-  simulado para `Q04.failed-deploy-request`, sin ejecutarla; no cubre el deploy
-  real ni la coordinación de lock, backup y salud del entrypoint del servidor.
+  La aceptación funcional completa sigue pendiente.
 
-## Workflows SSH y dashboard verificados: 2026-10-22
+## Workflows SSH verificados: 2026-10-22
 
 - Promoción aislada a `staging`, sin cambios de aplicación ni merges de `develop`:
   API `2c32ecea527f870b897d7fe8a7cf1e12631076a4` y UI
@@ -328,13 +280,6 @@ iniciativa al consultar esta guía.
   `linux/amd64` de los tags SHA publicados coinciden con los contenedores vivos.
   Un índice OCI puede cambiar por su procedencia sin cambiar el manifest de la
   plataforma; no forzar una recreación sólo porque difiera el ID del índice.
-- Dashboard y API de Traefik: `401` sin credenciales y `200` autenticados; raíz
-  autenticada redirige a `/dashboard/`. Certificado de origen validado con el
-  hostname exacto y cadena confiable; origen directo `403`, aplicación `200`.
-- Se creó sólo el A proxied del dashboard, se conservaron el token DNS y el estado
-  ACME activos, y se retiró el TXT huérfano creado por esta operación después de
-  detener al único emisor. PostgreSQL/Redis no se reiniciaron durante la promoción
-  ni el cambio del dashboard; el backup sigue operativo.
 - Configuración pública y guía aplicadas en el VPS y versionadas en la rama
   `staging` de este repositorio. No se cambió el modo SSL de toda la zona
   Cloudflare ni se ejecutaron suites locales adicionales.

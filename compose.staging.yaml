@@ -3,15 +3,9 @@ name: bemol-staging
 
 services:
   ui:
-    ports: !reset []
     environment:
       DEPLOYMENT_ENV: staging
       AUTO_LOGIN_ENABLED: ${AUTO_LOGIN_ENABLED:-false}
-    networks:
-      default:
-      proxy:
-        aliases:
-          - bemol-ui-staging
 
   api:
     environment:
@@ -52,6 +46,3 @@ networks:
   default:
     external: true
     name: bemol-network-staging
-  proxy:
-    external: true
-    name: bemol-proxy-staging

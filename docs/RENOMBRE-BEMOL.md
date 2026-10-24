@@ -1,5 +1,8 @@
 # Renombre integral a Bemol
 
+Registro histórico del renombre. La operación vigente se documenta en
+[STAGING.md](STAGING.md); no repetir procedimientos de componentes retirados.
+
 El producto se llama **Bemol**, incluidos sus identificadores técnicos. Los nombres
 anteriores no son una compatibilidad permanente. Las plantillas no ejecutan cambios
 por sí mismas; las operaciones autorizadas realmente aplicadas se registran abajo.
@@ -20,7 +23,7 @@ El usuario renombró los repositorios remotos a `bemol-api`, `bemol-ui` y `bemol
   migraron datos antiguos ni se hicieron backups de esos datasets.
 - Se retiraron nueve contenedores detenidos de los dos stacks anteriores, sus
   cinco volúmenes y la red antigua, con guardas de identidad/consumidores; no hubo
-  force ni prune. Dokploy, su PostgreSQL y Traefik siguieron funcionando sin
+  force ni prune. Los servicios de administración, su PostgreSQL y el proxy de ese momento siguieron sin
   recrearlos ni borrar sus volúmenes.
 - Se aplicaron el archivo dinámico `bemol-staging.yml`, alias y middlewares Bemol,
   conservando el dominio general nativo y wildcard institucional. DB password,
@@ -59,7 +62,7 @@ no tareas para repetir sobre el entorno ya recreado.
   SQL activas `bemol_*`, claves de aplicación Redis `bemol:*`, prefijo S3 `bemol/`.
 - UI: paquete `bemol-ui`, variable de servidor `BEMOL_API_URL`, marca Bemol.
 - Staging: los cinco volúmenes externos y la red de la tabla siguiente,
-  alias `bemol-ui-staging`, routers/servicios/middlewares Traefik `bemol-*`.
+  con los identificadores de aplicación Bemol.
 - Backups: `bemol-backup@staging.timer`/`.service`, lock
   `/tmp/bemol-infra-staging.lock`, destino `/var/backups/bemol/staging`, dumps
   `bemol-staging-<UTC>.dump`; checkout operativo `/opt/bemol-infra`.
@@ -70,20 +73,8 @@ no tareas para repetir sobre el entorno ya recreado.
   una migración adicional; el historial conserva nombres y checksums originales.
 
 Los checkouts locales actuales siguen siendo `boero-api`, `boero-ui` y
-`boero-infra`; no se movieron cwd, worktrees ni directorios del sandbox. Los
-defaults del tooling ya buscan los nombres canónicos `bemol-api` y `bemol-ui`.
-Mientras estos checkouts conserven su ubicación anterior, indicar explícitamente
-sus rutas reales al ejecutar una verificación autorizada:
-
-```sh
-API_REPO=/home/matias/Workspace/Repositories/TypeIt/boero-api \
-UI_REPO=/home/matias/Workspace/Repositories/TypeIt/boero-ui \
-make verify-institutional-access
-```
-
-Ese override es transitorio, no un default compatible permanente. Si se mueven los
-checkouts en una operación posterior, actualizar worktrees, integraciones y rutas
-del host antes de retirar el override; no apuntar a directorios inexistentes.
+`boero-infra`; no se movieron cwd, worktrees ni directorios del sandbox. Un cambio
+de ubicación requiere actualizar las integraciones y rutas del host por separado.
 
 ## Identidades persistentes objetivo
 
@@ -128,7 +119,7 @@ autoriza producción, borrados globales, publicaciones Git o cambios de polític
 4. Usar imágenes/configuración Bemol compatibles y seeders del entorno indicado.
    En remoto, respetar la entrega autorizada Actions/GHCR → Dokploy: disponer de
    acceso SSH no autoriza publicar cambios ni saltar ese flujo. Coordinar alias,
-   archivo Traefik y referencias Domains si se aplica el renombre remoto.
+   configuración del proxy vigente y dominios si se aplica el renombre remoto.
 5. Comprobar identidad del nuevo destino, salud y datos sembrados, y retirar los
    consumidores anteriores sólo de ese entorno. La recreación local no acredita
    que staging haya cambiado ni que un deploy remoto esté autorizado.
@@ -178,8 +169,8 @@ descartable, detener esa eliminación y aplicar la vía de persistencia siguient
    ya migrados, imágenes Bemol, `BEMOL_API_URL`, `STORAGE_S3_PREFIX` y configuración
    privada de WebAuthn RP name Bemol. **Mantener RP ID, orígenes, dominios, JWT y
    claves de refresh:** no hay necesidad de romper credenciales por la marca.
-   Coordinar alias UI, archivo dinámico Traefik y los cinco middlewares `@file` de
-   Domains; no dejar routers apuntando al alias anterior ni reglas sin protección.
+   Coordinar el upstream UI y las reglas de seguridad del proxy vigente; no dejar
+   destinos apuntando al alias anterior ni rutas sin protección.
    Renombrar `appName` técnico de Dokploy con plan específico del recurso real,
    sin inventar un sufijo ni recrear servicios a ciegas; conservar `composeId` si
    la operación lo permite, o actualizar sus consumidores si cambia.
@@ -229,8 +220,3 @@ La sintaxis y el render de Compose por sí solos no prueban una migración ni la
 existencia de destinos remotos. El registro de staging anterior distingue las
 comprobaciones vivas realizadas; otros entornos requieren inventario y autorización
 propios antes de aplicar estas configuraciones.
-
-El harness sólo admite namespaces/labels/archivos de estado `bemol-acceptance-*`.
-Se retiró la compatibilidad anterior tras verificar que no había estados ni
-recursos locales de aceptación pendientes de cleanup. No se modifican evidencias
-históricas ni se amplía la limpieza a recursos ajenos.
