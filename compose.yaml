@@ -1,4 +1,4 @@
-# Shared service definitions for staging and disposable local acceptance fixtures.
+# Shared service definitions for staging.
 # Staging merges compose.staging.yaml over this file.
 name: bemol
 

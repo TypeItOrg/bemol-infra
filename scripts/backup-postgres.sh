@@ -35,7 +35,7 @@ case "$retention_days" in
   0) echo "BACKUP_RETENTION_DAYS must be greater than zero" >&2; exit 1 ;;
 esac
 
-# The override lets disposable acceptance fixtures use only their own volume.
+# Select PostgreSQL by its mounted volume, not its container name.
 postgres_volume="${BACKUP_POSTGRES_VOLUME:-bemol-api-postgres-data-staging}"
 postgres_containers="$(docker ps \
   --filter "volume=$postgres_volume" \
