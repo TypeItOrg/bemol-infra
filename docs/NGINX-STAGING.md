@@ -41,6 +41,17 @@ Todas las rutas permitidas van a Next.js, incluido `/api/*`; no hay upstream pú
 de Spring. `/api/v1`, `/api/v1/*` y `/actuator*` devuelven `403`. Se conserva `Host`
 y se reconstruyen los headers de IP antes de enviarlos a la aplicación.
 
+Si el proxy no puede comunicarse con Next.js, los errores generados por Nginx
+`502/503/504` se convierten en `503`. Sólo navegación `GET/HEAD` que acepta HTML
+recibe la pantalla autocontenida `.deploy/maintenance/maintenance.html`; se excluyen
+API, RSC y assets. El resto recibe JSON de indisponibilidad, nunca una página que
+pueda reenviar una mutación. Se mantienen los headers de seguridad y se agrega
+`no-store` y `Retry-After: 5` a estas respuestas.
+
+Los errores HTTP que Next.js devuelve se conservan (`proxy_intercept_errors off`):
+el fallback no reemplaza errores funcionales ni respuestas JSON de la aplicación.
+Las rutas `/__bemol/maintenance` y `/__bemol/unavailable` son internas de Nginx.
+
 ## Límites y respuestas
 
 - Tráfico general: 20 solicitudes/s por cliente, burst 100.
@@ -77,6 +88,13 @@ antes de reemplazarlos; no modificar DB ni volúmenes para cambiar el proxy.
 
 3. Copiar primero los archivos compartidos y el sitio a los destinos de la tabla;
    preparar su enlace en `sites-enabled` y después instalar el archivo global.
+   Para activar la pantalla, publicar la nueva imagen UI y ejecutar `make deploy`
+   antes de recargar Nginx: debe existir
+   `/opt/bemol-infra/.deploy/maintenance/maintenance.html`, legible por sus workers.
+   Comprobar la lectura con `sudo -u www-data test -r /opt/bemol-infra/.deploy/maintenance/maintenance.html`;
+   no ampliar permisos de directorios privados para resolver un fallo.
+   Instalar juntos el sitio y `application.conf`, porque comparten los mapas del
+   fallback. No hacen falta cambios en certificados, DNS ni volúmenes.
 4. Validar antes de recargar un Nginx activo:
 
    ```sh

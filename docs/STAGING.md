@@ -56,11 +56,18 @@ Es el mismo flujo para un VPS vacío y para actualizaciones. El script:
 1. Toma `/tmp/bemol-infra-staging.lock` y valida `.env.staging` y el Compose combinado.
 2. Descarga UI, API y `api-storage-init`.
 3. Crea los cinco volúmenes y la red si faltan; reutiliza los existentes.
-4. Ejecuta `up --detach --pull missing --wait --wait-timeout 900`.
+4. Lee `public/maintenance.html` de la imagen UI y actualiza atómicamente
+   `.deploy/maintenance/maintenance.html`, antes de reemplazar la aplicación.
+5. Ejecuta `up --detach --pull missing --wait --wait-timeout 900`.
 
 El proyecto Compose es `bemol-staging`. PostgreSQL y Redis se descargan sólo si
 sus imágenes no están disponibles localmente. `api-storage-init` prepara los
 permisos del almacenamiento antes de iniciar la API.
+
+La extracción ejecuta sólo `cat` en un contenedor temporal de UI, sin iniciar
+Next.js, publicar puertos ni levantar dependencias. Si la imagen no incluye la
+pantalla o la extracción falla, el script aborta antes de reemplazar la aplicación
+y conserva la copia anterior. No borrar `.deploy/maintenance` mientras Nginx lo usa.
 
 **El despliegue no ejecuta backups, no borra datos y no configura el host.** Nginx,
 Certbot, DNS, usuarios y timers se preparan por separado. Crear un volumen vacío
@@ -73,6 +80,26 @@ o eliminaciones de volúmenes para resolver un despliegue.
 Editar `.env.staging` y hacer `restart` no actualiza el entorno de los contenedores:
 volver a desplegar. Con tags móviles, ese deploy también puede actualizar ambas
 aplicaciones; fijar versiones conocidas si el cambio debe ser sólo de configuración.
+
+## Pantalla temporal y recuperación
+
+La pantalla se genera durante `dev` y `build` con Tailwind y los tokens de
+`globals.css`; el HTML resultante incluye CSS, fuente y logo, sin CDN ni recursos
+externos. Es un único archivo autocontenido de UI: funciona desde Next.js cuando
+la API no está lista y desde Nginx si el frontend no responde. Comprueba
+`/api/health`, que verifica también readiness de la API, y vuelve a la dirección
+original mediante una navegación GET; no reenvía formularios ni Server Actions.
+
+El recambio de contenedores sigue siendo el habitual: no hay blue/green, no se
+duplican servicios y el corte no desaparece. Nginx entrega la pantalla con `503`,
+`Cache-Control: no-store` y `Retry-After: 5` sólo a navegación HTML segura; API,
+RSC, assets y mutaciones no reciben HTML de mantenimiento.
+
+Para activarla, publicar primero una imagen UI que contenga `maintenance.html`,
+actualizar el checkout de infraestructura y ejecutar `make deploy`. Después
+instalar los dos archivos de Nginx modificados, validar y recargar según
+[NGINX-STAGING.md](NGINX-STAGING.md). No se aplican al host automáticamente.
+Una caída de Nginx o del VPS queda fuera de esta pantalla.
 
 ## Entrega desde GitHub Actions
 

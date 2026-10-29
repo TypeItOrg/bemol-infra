@@ -36,4 +36,13 @@ done
 docker network inspect bemol-network-staging >/dev/null 2>&1 ||
   docker network create bemol-network-staging >/dev/null
 
+install -d -m 755 .deploy/maintenance
+maintenance_file=$(mktemp .deploy/maintenance/.maintenance.XXXXXX)
+trap 'rm -f "$maintenance_file"' EXIT
+"${compose[@]}" run --rm --no-deps --pull never --entrypoint cat -T ui \
+  /app/public/maintenance.html > "$maintenance_file"
+test -s "$maintenance_file"
+chmod 644 "$maintenance_file"
+mv -f "$maintenance_file" .deploy/maintenance/maintenance.html
+
 "${compose[@]}" up --detach --pull missing --wait --wait-timeout 900
