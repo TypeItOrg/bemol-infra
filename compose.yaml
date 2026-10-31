@@ -12,6 +12,7 @@ services:
       # Application
       # =============================================================================
       BEMOL_API_URL: http://api:8080
+      PLATFORM_PUBLIC_URL: ${PLATFORM_PUBLIC_URL:?PLATFORM_PUBLIC_URL is required}
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-}
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
@@ -58,6 +59,7 @@ services:
       # Application
       # =============================================================================
       SERVER_PORT: 8080
+      PLATFORM_PUBLIC_URL: ${PLATFORM_PUBLIC_URL:?PLATFORM_PUBLIC_URL is required}
       FRONTEND_PUBLIC_URL: ${FRONTEND_PUBLIC_URL:-}
       JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=70.0 -XX:+ExitOnOutOfMemoryError}
 
