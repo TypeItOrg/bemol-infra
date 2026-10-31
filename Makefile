@@ -14,3 +14,8 @@ deploy deploy-staging:
 
 backup-db:
 	flock /tmp/bemol-infra-staging.lock ./scripts/backup-postgres.sh staging
+
+.PHONY: platform-passkey-setup
+export ACCOUNT_ID
+platform-passkey-setup:
+	@flock /tmp/bemol-infra-staging.lock bash ./scripts/platform-passkey-setup.sh "$${ACCOUNT_ID}"

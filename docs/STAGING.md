@@ -179,3 +179,89 @@ Después de un cambio, comprobar contenedores y healthchecks, imágenes y montaj
 efectivos, HTTPS y la función afectada. La validación del proxy está en
 [NGINX-STAGING.md](NGINX-STAGING.md). Un healthcheck no prueba login, correo, passkeys,
 adjuntos ni recuperación de datos; verificar esos flujos cuando formen parte del cambio.
+
+## Administración de plataforma: alta de llave y recuperación
+
+La administración se publica en `https://admin.staging.bemol.com.ar`, DNS-only hacia
+el VPS. No usa Cloudflare Access ni su WAF. Nginx lo atiende mediante la expresión
+regular y los bloques HTTP/HTTPS compartidos con las instituciones, sin bloques
+específicos para `admin`. Next.js y la API distinguen el dominio configurado en
+`PLATFORM_PUBLIC_URL` y aplican la autenticación administrativa con passkey.
+La administración se abre en la raíz del subdominio, sin el prefijo `/admin`:
+`/` muestra el panel si hay sesión y, si no, lleva a `/auth/login`.
+Los enlaces del panel usan rutas como `/institutions` y `/account/passkeys`.
+Next.js las reescribe internamente a sus páginas `/admin/...`, sin cambiar la URL
+visible. Los enlaces antiguos con `/admin` redirigen a la ruta pública equivalente;
+sus mutaciones se rechazan, no se reenvían. Las rutas `/api/admin/*` no cambian.
+Antes de activar, comprobar que el certificado `bemol-staging` cubra
+`*.staging.bemol.com.ar`, validar `nginx -t` y verificar el destino DNS.
+No añadir AAAA sin IPv6 operativo.
+
+Configurar `PLATFORM_PUBLIC_URL=https://admin.staging.bemol.com.ar` en el entorno de
+API/UI y recrear los contenedores mediante el despliegue existente. El dominio
+institucional y sus variables WebAuthn no cambian. La migración de MFA cierra las
+sesiones previas de plataforma; API y UI deben actualizarse coordinadamente.
+No reutilizar el frontend anterior, que esperaba tokens después de la contraseña.
+
+### Primera configuración o pérdida de todas las llaves
+
+1. Verificar el host SSH, el contexto Docker y la identidad del administrador por
+   un canal de confianza. El código no restablece su contraseña ni crea cuentas.
+2. Obtener el UUID de `platform_accounts` correspondiente a la cuenta habilitada.
+   Puede consultarse en su detalle desde otra sesión administrativa o mediante
+   una consulta de solo lectura en PostgreSQL:
+
+   ```sql
+   SELECT platform_account_id, email FROM platform_accounts WHERE enabled ORDER BY email;
+   ```
+
+   No usar el UUID del usuario institucional.
+3. Desde una terminal SSH interactiva, ejecutar:
+
+   ```sh
+   cd /opt/bemol-infra
+   make platform-passkey-setup ACCOUNT_ID=UUID_DE_LA_CUENTA
+   ```
+
+4. Entregar el código mostrado por un canal privado. Expira en **15 minutos** y es
+   de **un solo uso**. Emitir otro invalida el anterior. No guardarlo en tickets,
+   chats, archivos, logs o capturas de pantalla; el comando rechaza stdout no interactivo.
+5. El administrador ingresa email y contraseña en el nuevo dominio. Si ya tenía
+   llaves, elige **Perdí mis llaves de acceso**. Presenta el código y registra una
+   llave con su dispositivo compatible. Solo después obtiene una sesión.
+
+El servidor conserva únicamente el hash del código en Redis, ligado a la cuenta.
+La autorización por sí sola no permite acceder al panel ni registrar llaves en otra
+cuenta. Al completar la recuperación, una transacción revoca las llaves anteriores,
+registra la nueva y cierra las sesiones previas. La nueva sesión usa la nueva llave.
+Un fallo o vencimiento puede requerir emitir otro código; nunca borrar credenciales
+ni desactivar MFA manualmente para resolverlo. Si Redis pierde el código, emitir otro.
+
+Con acceso normal, **Llaves de acceso** en el menú del administrador reutiliza el
+gestor existente. Permite agregar una llave de respaldo, renombrar y eliminar.
+Agregar o eliminar exige confirmar con una llave existente; no se permite borrar
+la última. Eliminar otra cierra las sesiones, incluida la actual.
+
+En desarrollo local, `http://admin.localhost:3000` permite ingresar solo con email y
+contraseña por defecto. Para probar el flujo completo, iniciar la API con
+`PLATFORM_PASSKEY_REQUIRED=true make dev` desde `bemol-api`, o definir esa variable
+en `.env.dev`. No se configura en la UI: esta sigue la respuesta del backend.
+Cerrar sesión y volver a ingresar para probar el cambio de modo.
+Solo el perfil `dev` permite desactivar la exigencia; fuera de él, incluida cualquier
+combinación con `staging`, `prod` o `production`, la API rechaza esa configuración
+al iniciar. Staging y producción mantienen las passkeys obligatorias por defecto.
+
+Con passkeys activadas en local se usa el mismo contrato Redis: la clave
+`bemol:platform:setup:<uuid>` contiene el SHA-256 del código en Base64, con TTL de
+900 segundos. Se puede emitir con los contenedores locales siguiendo la receta del
+script; el comando de infraestructura selecciona exclusivamente el proyecto y los
+volúmenes de staging para evitar operar otro entorno. No usar el modo solo contraseña
+con datos reales ni en entornos compartidos o expuestos.
+
+### Comprobación después de activar
+
+Verificar con una cuenta de prueba: contraseña sola no abre sesión, alta con código,
+login con llave, alta de respaldo y rescate. Confirmar que el host principal y los
+institucionales rechazan mutaciones administrativas, que sus páginas antiguas
+redirigen al nuevo dominio y que los accesos institucionales siguen funcionando.
+No ejecutar `FLUSHALL`, `down -v` ni modificar contraseñas o datos institucionales.

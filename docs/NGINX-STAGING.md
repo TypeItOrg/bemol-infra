@@ -26,8 +26,17 @@ El global no carga `/etc/nginx/conf.d` ni los antiguos directorios de Bemol.
 | Dominio | Configuración prevista |
 |---|---|
 | `staging.bemol.com.ar` | Proxied por Cloudflare, TLS Full (strict); Nginx exige un peer Cloudflare |
+| `admin.staging.bemol.com.ar` | Administración, DNS-only; regex compartida en Nginx y passkey exigida por la aplicación |
 | `<institucion>.staging.bemol.com.ar` | Wildcard DNS-only hacia el VPS; admite acceso directo y un nivel de slug |
 | Otros nombres | Cierre HTTP `444` o rechazo del handshake TLS |
+
+El host `admin.staging.bemol.com.ar` coincide con la misma expresión regular de
+subdominios de un nivel que las instituciones y comparte sus bloques HTTP/HTTPS;
+no tiene bloques `server` propios. Nginx conserva `Host`: Next.js y la API reconocen
+el dominio administrativo mediante `PLATFORM_PUBLIC_URL` y aplican sus controles
+de acceso y passkeys.
+El panel se publica en `/`, sin `/admin` en las URLs visibles; esa reescritura
+interna la realiza Next.js, no Nginx.
 
 Los institucionales usan HTTPS de Nginx, pero no heredan el WAF ni los límites del
 edge Cloudflare. No añadir registros AAAA sin IPv6 operativo.
@@ -62,8 +71,9 @@ Las rutas `/__bemol/maintenance` y `/__bemol/unavailable` son internas de Nginx.
 - Cuerpo máximo: 32 MiB. Respuestas sin buffering para streaming y compresión gzip.
 - Sin caché HTTP compartida: Next.js conserva sus headers `Cache-Control`.
 
-Los headers de seguridad y TLS están en `application.conf`, compartido por los dos
-hosts HTTPS. No agregar `add_header` en un `location` sin conservar los heredados.
+Los headers de seguridad y TLS están en `application.conf`, compartido por el
+dominio general y los subdominios HTTPS. No agregar `add_header` en un `location`
+sin conservar los heredados.
 La caché de sesiones TLS no almacena respuestas HTTP.
 
 ## Preparar y aplicar la configuración
