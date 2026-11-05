@@ -64,8 +64,14 @@ Las rutas `/__bemol/maintenance` y `/__bemol/unavailable` son internas de Nginx.
 ## Límites y respuestas
 
 - Tráfico general: 20 solicitudes/s por cliente, burst 100.
-- Autenticación: 30 solicitudes/min, burst 20, en los POST definidos en el mapa.
-- Concurrencia: 50 conexiones por cliente y 200 por host; excesos devuelven `429`.
+- Autenticación por cliente: promedio de 2 solicitudes/min, burst 4, en los POST
+  definidos en el mapa. Incluye registro, recuperación y los pasos de las llaves
+  de acceso; una ráfaga desde reposo admite hasta cinco solicitudes.
+- Escrituras globales (`POST`, `PUT`, `PATCH`, `DELETE`): 5 solicitudes/s, burst 10,
+  compartidas entre todos los hosts. Incluye autenticación y Server Actions,
+  aunque se invoquen desde otra URL; no depende del header `Next-Action`.
+- Tráfico general global: 50 solicitudes/s, burst 100, compartidas entre todos los hosts.
+- Concurrencia: 50 conexiones por cliente y 200 globales; excesos devuelven `429`.
 - Clientes institucionales: IPv4 por dirección e IPv6 por red `/64`.
   El dominio general cuenta por IP individual.
 - Cuerpo máximo: 32 MiB. Respuestas sin buffering para streaming y compresión gzip.
@@ -75,6 +81,23 @@ Los headers de seguridad y TLS están en `application.conf`, compartido por el
 dominio general y los subdominios HTTPS. No agregar `add_header` en un `location`
 sin conservar los heredados.
 La caché de sesiones TLS no almacena respuestas HTTP.
+
+Los límites son un punto de partida operativo, no una garantía de capacidad ante
+ataques distribuidos. Usan `nodelay`: el exceso se rechaza, no se encola. La cuota
+se recupera gradualmente; no hay un bloqueo fijo de cinco minutos.
+
+Los rechazos del borde devuelven `429`, `Cache-Control: no-store` y `Retry-After: 30`.
+El plazo indica cuándo volver a intentar, no garantiza capacidad disponible: otros
+clientes pueden consumir el límite global o compartir una misma red.
+`/__bemol/rate-limited` es interna y conserva los headers de seguridad heredados.
+La respuesta es `text/plain` sin charset, con el texto exacto
+`Demasiadas solicitudes. Intentá nuevamente en unos instantes.`. Es el contrato con
+el manejo de errores de Server Actions de Next.js y el frontend. No sustituirlo
+por HTML/JSON sin adaptar y verificar ese flujo. Los `429` del upstream conservan
+su respuesta original (`proxy_intercept_errors off`).
+
+Cambiar este repositorio no aplica la configuración al Nginx del host: instalar
+los archivos y ejecutar `nginx -t` antes del reload es una operación separada.
 
 ## Preparar y aplicar la configuración
 
