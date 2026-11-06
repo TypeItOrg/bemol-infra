@@ -168,6 +168,78 @@ recupera ejecuciones perdidas. No dejar dos programaciones para el mismo backup.
 El dump no incluye adjuntos ni Redis. Un backup en el mismo VPS no cubre la pérdida
 del servidor: conservar copias externas y comprobar restauraciones por separado.
 
+## Preparación del renderizador PDF
+
+La imagen API incluye Chrome for Testing durante su construcción. El ejecutable
+predeterminado es `/opt/chrome/chrome`; no se descarga al arrancar. Mantener
+`appuser`, raíz de solo lectura, `cap_drop: ALL`, `no-new-privileges` e `init`.
+No agregar `--no-sandbox`, capacidades ni desactivar AppArmor. Un smoke local
+tampoco establece que el kernel del VPS admita el sandbox.
+
+El 6 de noviembre de 2026 se autorizó preparar un perfil seccomp específico para
+Chromium, sin desplegarlo. `security/chromium-seccomp.json` conserva la política
+predeterminada de [Moby seccomp v0.2.3](https://github.com/moby/profiles/tree/836ae4d37ef2ec995c77c99fc55f5b5f3af3a897/seccomp)
+(commit `836ae4d37ef2ec995c77c99fc55f5b5f3af3a897`), usada por Docker Engine 29.8.0.
+El SHA-256 del `seccomp/default.json` original es
+`536529b665dd0972c37bfb569f5d4ac8a53592e7b00752bc39ff063ca9864c74`.
+Su licencia Apache 2.0 se conserva en `security/chromium-seccomp.LICENSE`.
+
+La única ampliación son cinco reglas para `amd64` y `arm64`: `clone` con argumento
+0 exactamente igual a `268435473`, `1879048209` o `536870929`; `unshare` con
+argumento 0 igual a `268435456`; y `chroot`. Chromium usa estas operaciones para
+crear sus namespaces y aislar el filesystem dentro del namespace de usuario;
+no se añaden capacidades al contenedor. Se mantienen las restricciones de
+`clone3`, `setns` y las demás llamadas del perfil original.
+
+El archivo debe existir en el checkout antes de crear la API: Docker lo lee desde
+el host mediante `security_opt`. Es una copia idéntica de
+`bemol-api/docker/chromium-seccomp.json`; sincronizar también la licencia cuando
+cambie la base. Esta configuración prepara únicamente staging; producción
+todavía no está configurada aquí. No se ha desplegado ni modificado el VPS.
+
+`API_TMPFS_SIZE` reserva hasta 256 MiB para perfiles y documentos transitorios;
+el uso efectivo cuenta dentro de `API_MEMORY_LIMIT`. Antes de desplegar, validar
+la imagen localmente con los controles de seguridad del Compose: 1 CPU, 1 GiB de
+memoria y temporales de 256 MiB. Medir un arranque frío y 20 exportaciones
+secuenciales alternando un caso simple y uno multipágina. Verificar también que
+una solicitud concurrente devuelva `503`/`Retry-After: 5` sin encolarse.
+
+Aceptar únicamente renders menores a diez segundos, pico total de memoria y
+temporales por debajo del 75 % de sus límites, sin procesos ni archivos
+residuales. Si falta memoria, probar 1,5 GiB y después 2 GiB conservando el heap
+actual; elegir el menor candidato aprobado. Si faltan temporales, probar 512 MiB
+y repetir la medición. No reducir el heap por intuición ni ampliar más recursos
+sin una decisión explícita. Registrar los resultados antes de fijar valores en
+el entorno; esta preparación no ejecuta un despliegue ni modifica el VPS.
+
+### Validación local del 6 de noviembre de 2026
+
+Se validó la API real en Docker con 1 CPU, temporales de 256 MiB, las opciones
+actuales de heap y las protecciones indicadas. Cada candidato produjo 21 PDFs
+válidos: la primera generación en frío y 20 exportaciones secuenciales. La misma
+medición externa de memoria se usó en los tres casos.
+
+| Límite de memoria | Pico total | Margen libre | Resultado |
+| --- | --- | --- | --- |
+| 1 GiB | 1024 MiB | 0 % | No cumple el margen mínimo |
+| 1,5 GiB | 1054,77 MiB | 31,33 % | Aprobado; menor candidato válido |
+| 2 GiB | 1120,38 MiB | 45,29 % | Aprobado; no es necesario |
+
+El candidato elegido, `API_MEMORY_LIMIT=1536m`, tardó 1717 ms en la primera
+generación; el rango de las 21 fue de 1104 a 1717 ms. El pico de temporales fue
+2,97 MiB sobre 256 MiB. Se mantienen `API_TMPFS_SIZE=256m`, 1 CPU y los porcentajes
+de heap, sin reducirlos para aprobar el control.
+
+Se comprobó el proceso renderer real mediante su línea de argumentos y `/proc`:
+UID 10001, `CapEff=0`, `NoNewPrivs=1`, namespace PID anidado con PID interno 1 y
+dos filtros seccomp frente al único filtro de la JVM. Conservó el mismo perfil
+AppArmor del contenedor; Chromium añadió su sandbox sin desactivar las
+protecciones externas.
+
+El control local está aprobado, pero no verifica el kernel ni el sandbox del
+servidor de staging. La ejecución en `arm64` tampoco se ha verificado. Estas
+comprobaciones siguen siendo obligatorias antes de desplegar en cada entorno.
+
 ## Rollback y comprobaciones
 
 Para volver a una versión de aplicación, fijar imágenes inmutables compatibles y
