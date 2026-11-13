@@ -120,7 +120,7 @@ services:
       # =============================================================================
 
       STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-}
-      STORAGE_S3_PREFIX: ${STORAGE_S3_PREFIX:-bemol/}
+      STORAGE_S3_PREFIX: ${STORAGE_S3_PREFIX:-}
       STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-}
       STORAGE_S3_REGION: ${STORAGE_S3_REGION:-us-east-1}
       STORAGE_S3_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID:-}
