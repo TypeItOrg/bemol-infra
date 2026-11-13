@@ -44,4 +44,16 @@ test -s "$maintenance_file"
 chmod 644 "$maintenance_file"
 mv -f "$maintenance_file" .deploy/maintenance/maintenance.html
 
-"${compose[@]}" up --detach --pull missing --wait --wait-timeout 900
+# The ui healthcheck depends on the api, so --wait can abort while the api restarts
+for attempt in 1 2; do
+  if "${compose[@]}" up --detach --pull missing --wait --wait-timeout 900; then
+    break
+  fi
+
+  if (( attempt == 2 )); then
+    exit 1
+  fi
+
+  echo "Deploy wait failed, retrying once" >&2
+  sleep 15
+done
