@@ -27,14 +27,6 @@ services:
       AUTO_LOGIN_USER_ID: ${AUTO_LOGIN_USER_ID:-}
       AUTO_LOGIN_INSTITUTION_ID: ${AUTO_LOGIN_INSTITUTION_ID:-}
 
-    depends_on:
-      api-storage-init:
-        condition: service_completed_successfully
-
-  api-storage-init:
-    profiles: !reset []
-    pull_policy: always
-
 volumes:
   ui-next-cache:
     name: bemol-ui-next-cache-staging
@@ -47,9 +39,6 @@ volumes:
 
   api-logs:
     name: bemol-api-logs-staging
-
-  api-storage:
-    name: bemol-api-enrollment-storage-staging
 
 networks:
   default:

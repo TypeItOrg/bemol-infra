@@ -22,14 +22,13 @@ fi
 compose=(docker compose --project-name bemol-staging --env-file "$env_file" -f compose.yaml -f compose.staging.yaml)
 "${compose[@]}" config --quiet
 
-"${compose[@]}" pull ui api api-storage-init
+"${compose[@]}" pull ui api
 
 for volume in \
   bemol-ui-next-cache-staging \
   bemol-api-postgres-data-staging \
   bemol-api-redis-data-staging \
-  bemol-api-logs-staging \
-  bemol-api-enrollment-storage-staging; do
+  bemol-api-logs-staging; do
   docker volume create "$volume" >/dev/null
 done
 
