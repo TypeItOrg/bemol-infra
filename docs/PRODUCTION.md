@@ -82,8 +82,9 @@ Cambiar de imagen no revierte migraciones Flyway.
 1. Crear `.env.production` desde `.env.production.example`, `chmod 600`. Generar
    secretos nuevos (`JWT_SECRET`, `REFRESH_REPLAY_ENCRYPTION_KEY`, `DB_PASSWORD`);
    no reutilizar los de staging. Bucket S3 y credenciales propios.
-2. DNS en Cloudflare: `bemol.com.ar` y `www` proxied; `*.bemol.com.ar` DNS-only
-   hacia el VPS (incluye `admin`). Sin AAAA mientras no haya IPv6 operativo.
+2. DNS en Cloudflare: `bemol.com.ar`, `www` y `*.bemol.com.ar` proxied hacia el
+   VPS (incluye `admin`); Nginx rechaza el acceso directo. SSL/TLS en Full (strict).
+   Sin AAAA mientras no haya IPv6 operativo.
 3. Emitir el certificado:
 
    ```sh

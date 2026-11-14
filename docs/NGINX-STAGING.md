@@ -34,6 +34,7 @@ Revisar los sitios habilitados antes de aplicar cambios: no cargar además el
 | `staging.bemol.com.ar` | Proxied por Cloudflare, TLS Full (strict); Nginx exige un peer Cloudflare |
 | `admin.staging.bemol.com.ar` | Administración, DNS-only; regex compartida en Nginx y passkey exigida por la aplicación |
 | `<institucion>.staging.bemol.com.ar` | Wildcard DNS-only hacia el VPS; admite acceso directo y un nivel de slug |
+| `bemol.com.ar`, `www` y `*.bemol.com.ar` | Producción: todo proxied por Cloudflare, TLS Full (strict); Nginx exige un peer Cloudflare en todos los hosts y `www` redirige al dominio principal |
 | Otros nombres | Cierre HTTP `444` o rechazo del handshake TLS |
 
 El host `admin.staging.bemol.com.ar` coincide con la misma expresión regular de
