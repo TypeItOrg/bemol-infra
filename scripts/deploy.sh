@@ -8,7 +8,6 @@ environment="${1:-}"
 require_env "$environment"
 lock_env "$environment"
 
-# One deploy at a time on the shared host: pulls and JVM starts compete for CPU and RAM
 exec 8>/tmp/bemol-infra-deploy.lock
 flock 8
 
