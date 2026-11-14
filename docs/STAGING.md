@@ -1,6 +1,6 @@
 # Staging: configuración y operación
 
-Esta rama configura únicamente staging. Producción no está preparada; el desarrollo
+Staging comparte el VPS con producción ([PRODUCTION.md](PRODUCTION.md)); el desarrollo
 local y la publicación de imágenes pertenecen a los repositorios de API/UI.
 Esta guía describe los archivos versionados, no acredita el estado actual del VPS.
 Antes de operar, confirmar el destino SSH, hostname y contexto Docker.
@@ -17,12 +17,12 @@ Navegador → Nginx del host → Next.js → API → PostgreSQL / Redis
 | [compose.yaml](../compose.yaml) | Servicios, puertos, recursos y montajes compartidos |
 | [compose.staging.yaml](../compose.staging.yaml) | Perfil staging y nombres de volúmenes/red |
 | [.env.staging.example](../.env.staging.example) | Plantilla pública de variables |
-| [deploy-staging.sh](../scripts/deploy-staging.sh) | Instalación y actualización de la aplicación |
+| [deploy.sh](../scripts/deploy.sh) | Instalación y actualización (`deploy-staging.sh` lo invoca con `staging`) |
 | [Nginx y Certbot](NGINX-STAGING.md) | Configuración del proxy, dominios y certificados |
 | [S3](S3.md) | Almacenamiento opcional de archivos |
 
 El host necesita Docker Engine, Compose con soporte para `!reset`, Bash, `make`
-y `flock`; un checkout de `staging` en `/opt/bemol-infra` y acceso de lectura a
+y `flock`; un checkout de `main` en `/opt/bemol-infra` (compartido con producción) y acceso de lectura a
 las imágenes GHCR. Usar una identidad con acceso a Docker y al archivo privado
 `.env.staging`; no alternar usuarios para deploy y backup porque comparten un lock.
 
@@ -57,7 +57,7 @@ Es el mismo flujo para un VPS vacío y para actualizaciones. El script:
 2. Descarga UI y API.
 3. Crea los cuatro volúmenes y la red si faltan; reutiliza los existentes.
 4. Lee `public/maintenance.html` de la imagen UI y actualiza atómicamente
-   `.deploy/maintenance/maintenance.html`, antes de reemplazar la aplicación.
+   `.deploy/maintenance/staging/maintenance.html`, antes de reemplazar la aplicación.
 5. Ejecuta `up --detach --pull missing --wait --wait-timeout 900`.
 
 El proyecto Compose es `bemol-staging`. PostgreSQL y Redis se descargan sólo si
@@ -158,7 +158,7 @@ ocurre sólo después de validar uno nuevo. Estos directorios no son necesarios 
 desplegar; prepararlos con acceso exclusivo para la identidad de backup.
 
 La programación es opcional: [las unidades systemd](../deploy/systemd/) se instalan
-por separado. Usan usuario/grupo `staging`, que debe existir y tener acceso a Docker,
+por separado. Usan usuario/grupo igual a la instancia (`staging`), que debe existir y tener acceso a Docker,
 `.env.staging`, al lock y al directorio de backups. El timer `bemol-backup@staging.timer`
 programa las 02:15 del reloj del servidor, hasta 15 minutos aleatorios después, y
 recupera ejecuciones perdidas. No dejar dos programaciones para el mismo backup.
@@ -218,7 +218,7 @@ No reutilizar el frontend anterior, que esperaba tokens después de la contrase�
 
    ```sh
    cd /opt/bemol-infra
-   make platform-passkey-setup ACCOUNT_ID=UUID_DE_LA_CUENTA
+   make platform-passkey-setup ENV=staging ACCOUNT_ID=UUID_DE_LA_CUENTA
    ```
 
 4. Entregar el código mostrado por un canal privado. Expira en **15 minutos** y es

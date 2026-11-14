@@ -1,21 +1,28 @@
 ENV ?= staging
 
-ifneq ($(ENV),staging)
-$(error ENV must be staging)
+ifeq ($(filter $(ENV),staging production),)
+$(error ENV must be staging or production)
 endif
 
+LOCK := /tmp/bemol-infra-$(ENV).lock
+
 .DEFAULT_GOAL := all
-.PHONY: all deploy deploy-staging backup-db
+.PHONY: all deploy deploy-staging deploy-production backup-db platform-passkey-setup
 
 all: ;
 
-deploy deploy-staging:
-	bash ./scripts/deploy-staging.sh
+deploy:
+	bash ./scripts/deploy.sh $(ENV)
+
+deploy-staging:
+	bash ./scripts/deploy.sh staging
+
+deploy-production:
+	bash ./scripts/deploy.sh production
 
 backup-db:
-	flock /tmp/bemol-infra-staging.lock ./scripts/backup-postgres.sh staging
+	flock $(LOCK) ./scripts/backup-postgres.sh $(ENV)
 
-.PHONY: platform-passkey-setup
 export ACCOUNT_ID
 platform-passkey-setup:
-	@flock /tmp/bemol-infra-staging.lock bash ./scripts/platform-passkey-setup.sh "$${ACCOUNT_ID}"
+	@flock $(LOCK) bash ./scripts/platform-passkey-setup.sh $(ENV) "$${ACCOUNT_ID}"

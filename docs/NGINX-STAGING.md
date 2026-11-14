@@ -9,13 +9,17 @@ aplicación no instala ni actualiza estos archivos; ver [STAGING.md](STAGING.md)
 | Fuente dentro de `deploy/nginx/` | Destino en el VPS |
 |---|---|
 | [nginx.conf](../deploy/nginx/nginx.conf) | `/etc/nginx/nginx.conf` — procesos, conexiones y ajustes HTTP generales |
-| [sites-available/staging.bemol.com.ar.conf](../deploy/nginx/sites-available/staging.bemol.com.ar.conf) | `/etc/nginx/sites-available/staging.bemol.com.ar.conf` — upstream, límites, logs y dominios |
+| [sites-available/00-bemol-common.conf](../deploy/nginx/sites-available/00-bemol-common.conf) | `/etc/nginx/sites-available/00-bemol-common.conf` — entornos, upstreams, límites, logs, mapas y hosts desconocidos |
+| [sites-available/staging.bemol.com.ar.conf](../deploy/nginx/sites-available/staging.bemol.com.ar.conf) | `/etc/nginx/sites-available/staging.bemol.com.ar.conf` — dominios y certificado de staging |
+| [sites-available/bemol.com.ar.conf](../deploy/nginx/sites-available/bemol.com.ar.conf) | `/etc/nginx/sites-available/bemol.com.ar.conf` — dominios y certificado de producción |
 | [cloudflare.conf](../deploy/nginx/cloudflare.conf) | `/etc/bemol/nginx/cloudflare.conf` — rangos confiables e IP real |
-| [application.conf](../deploy/nginx/application.conf) | `/etc/bemol/nginx/application.conf` — TLS, headers y rutas compartidas |
+| [application.conf](../deploy/nginx/application.conf) | `/etc/bemol/nginx/application.conf` — TLS común, headers y rutas compartidas |
 
 El global incluye `/etc/nginx/sites-enabled/*` dentro de `http`. El sitio se
-habilita con un enlace al archivo de `sites-available`; contiene mapas, zonas,
-upstream y bloques `server`, sin otro envoltorio `http`.
+habilita con un enlace al archivo de `sites-available`. `00-bemol-common.conf` se habilita
+una sola vez y contiene mapas, zonas, upstreams y los `default_server`; cada sitio
+sólo declara sus bloques `server` y su certificado. `$bemol_env` deriva del host
+el entorno, su upstream (`3000` staging, `3100` producción) y la pantalla temporal.
 
 Revisar los sitios habilitados antes de aplicar cambios: no cargar además el
 `default` de Ubuntu ni otro archivo con los mismos hosts o `default_server`.
@@ -52,7 +56,7 @@ y se reconstruyen los headers de IP antes de enviarlos a la aplicación.
 
 Si el proxy no puede comunicarse con Next.js, los errores generados por Nginx
 `502/503/504` se convierten en `503`. Sólo navegación `GET/HEAD` que acepta HTML
-recibe la pantalla autocontenida `.deploy/maintenance/maintenance.html`; se excluyen
+recibe la pantalla autocontenida `.deploy/maintenance/<entorno>/maintenance.html`; se excluyen
 API, RSC y assets. El resto recibe JSON de indisponibilidad, nunca una página que
 pueda reenviar una mutación. Se mantienen los headers de seguridad y se agrega
 `no-store` y `Retry-After: 5` a estas respuestas.
@@ -68,10 +72,11 @@ Las rutas `/__bemol/maintenance` y `/__bemol/unavailable` son internas de Nginx.
   definidos en el mapa. Incluye registro, recuperación y los pasos de las llaves
   de acceso; una ráfaga desde reposo admite hasta cinco solicitudes.
 - Escrituras globales (`POST`, `PUT`, `PATCH`, `DELETE`): 5 solicitudes/s, burst 10,
-  compartidas entre todos los hosts. Incluye autenticación y Server Actions,
+  por entorno, compartidas entre los hosts de ese entorno. Incluye autenticación y Server Actions,
   aunque se invoquen desde otra URL; no depende del header `Next-Action`.
-- Tráfico general global: 50 solicitudes/s, burst 100, compartidas entre todos los hosts.
-- Concurrencia: 50 conexiones por cliente y 200 globales; excesos devuelven `429`.
+- Tráfico general global: 50 solicitudes/s, burst 100, por entorno.
+- Todas las claves incluyen el entorno: staging nunca consume cuota de producción.
+- Concurrencia: 50 conexiones por cliente y 200 globales por entorno; excesos devuelven `429`.
 - Clientes institucionales: IPv4 por dirección e IPv6 por red `/64`.
   El dominio general cuenta por IP individual.
 - Cuerpo máximo: 32 MiB. Respuestas sin buffering para streaming y compresión gzip.
@@ -123,8 +128,8 @@ antes de reemplazarlos; no modificar DB ni volúmenes para cambiar el proxy.
    preparar su enlace en `sites-enabled` y después instalar el archivo global.
    Para activar la pantalla, publicar la nueva imagen UI y ejecutar `make deploy`
    antes de recargar Nginx: debe existir
-   `/opt/bemol-infra/.deploy/maintenance/maintenance.html`, legible por sus workers.
-   Comprobar la lectura con `sudo -u www-data test -r /opt/bemol-infra/.deploy/maintenance/maintenance.html`;
+   `/opt/bemol-infra/.deploy/maintenance/<entorno>/maintenance.html`, legible por sus workers.
+   Comprobar la lectura con `sudo -u www-data test -r /opt/bemol-infra/.deploy/maintenance/staging/maintenance.html`;
    no ampliar permisos de directorios privados para resolver un fallo.
    Instalar juntos el sitio y `application.conf`, porque comparten los mapas del
    fallback. No hacen falta cambios en certificados, DNS ni volúmenes.

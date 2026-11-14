@@ -4,8 +4,8 @@ set -eu
 environment="${1:-}"
 
 case "$environment" in
-  staging) ;;
-  *) echo "Environment must be staging" >&2; exit 1 ;;
+  staging|production) ;;
+  *) echo "Environment must be staging or production" >&2; exit 1 ;;
 esac
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -36,14 +36,15 @@ case "$retention_days" in
 esac
 
 # Select PostgreSQL by its mounted volume, not its container name.
-postgres_volume="${BACKUP_POSTGRES_VOLUME:-bemol-api-postgres-data-staging}"
+postgres_volume="${BACKUP_POSTGRES_VOLUME:-bemol-api-postgres-data-$environment}"
 postgres_containers="$(docker ps \
+  --filter "label=com.docker.compose.project=bemol-$environment" \
   --filter "volume=$postgres_volume" \
   --filter label=com.docker.compose.service=postgres \
   --format '{{.ID}}')"
 set -- $postgres_containers
 if [ "$#" -ne 1 ]; then
-  echo "Expected exactly one running staging PostgreSQL container; found $#" >&2
+  echo "Expected exactly one running $environment PostgreSQL container; found $#" >&2
   exit 1
 fi
 postgres_container="$1"
