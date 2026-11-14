@@ -74,7 +74,7 @@ la de staging; cada una sólo puede desplegar su entorno.
 
 4. Desplegar staging con este checkout (`make deploy`) para que exista
    `.deploy/maintenance/staging/`, y producción con `make deploy ENV=production`.
-5. Instalar Nginx según [NGINX-STAGING.md](NGINX-STAGING.md): `00-bemol-common.conf`,
-   ambos sitios y `application.conf` juntos; `nginx -t` antes de recargar.
+5. Instalar Nginx según [NGINX-STAGING.md](NGINX-STAGING.md): copiar el sitio
+   `bemol.com.ar.conf`, enlazarlo en `sites-enabled`, y `nginx -t` antes de recargar.
 6. Alta del administrador de plataforma y su passkey en `https://admin.bemol.com.ar`.
 7. Backup manual, prueba de restauración y copia fuera del VPS antes de abrir.

@@ -9,21 +9,23 @@ aplicación no instala ni actualiza estos archivos; ver [STAGING.md](STAGING.md)
 | Fuente dentro de `deploy/nginx/` | Destino en el VPS |
 |---|---|
 | [nginx.conf](../deploy/nginx/nginx.conf) | `/etc/nginx/nginx.conf` — procesos, conexiones y ajustes HTTP generales |
-| [sites-available/00-bemol-common.conf](../deploy/nginx/sites-available/00-bemol-common.conf) | `/etc/nginx/sites-available/00-bemol-common.conf` — entornos, upstreams, límites, logs, mapas y hosts desconocidos |
+| [conf.d/bemol.conf](../deploy/nginx/conf.d/bemol.conf) | `/etc/nginx/conf.d/bemol.conf` — entornos, upstreams, límites, logs, mapas y hosts desconocidos |
 | [sites-available/staging.bemol.com.ar.conf](../deploy/nginx/sites-available/staging.bemol.com.ar.conf) | `/etc/nginx/sites-available/staging.bemol.com.ar.conf` — dominios y certificado de staging |
 | [sites-available/bemol.com.ar.conf](../deploy/nginx/sites-available/bemol.com.ar.conf) | `/etc/nginx/sites-available/bemol.com.ar.conf` — dominios y certificado de producción |
-| [cloudflare.conf](../deploy/nginx/cloudflare.conf) | `/etc/bemol/nginx/cloudflare.conf` — rangos confiables e IP real |
-| [application.conf](../deploy/nginx/application.conf) | `/etc/bemol/nginx/application.conf` — TLS común, headers y rutas compartidas |
+| [snippets/bemol-cloudflare.conf](../deploy/nginx/snippets/bemol-cloudflare.conf) | `/etc/nginx/snippets/bemol-cloudflare.conf` — rangos confiables e IP real |
+| [snippets/bemol-application.conf](../deploy/nginx/snippets/bemol-application.conf) | `/etc/nginx/snippets/bemol-application.conf` — TLS común, headers y rutas compartidas |
 
-El global incluye `/etc/nginx/sites-enabled/*` dentro de `http`. El sitio se
-habilita con un enlace al archivo de `sites-available`. `00-bemol-common.conf` se habilita
-una sola vez y contiene mapas, zonas, upstreams y los `default_server`; cada sitio
-sólo declara sus bloques `server` y su certificado. `$bemol_env` deriva del host
+`deploy/nginx/` replica la estructura de `/etc/nginx`. El global incluye
+`conf.d/*.conf` y `sites-enabled/*` dentro de `http`. `conf.d/bemol.conf` se carga
+una sola vez y contiene mapas, zonas, upstreams y los `default_server`. Los
+`snippets/` no se cargan solos: cada bloque `server` incluye `bemol-application.conf`.
+Cada sitio se habilita con un enlace en `sites-enabled` y sólo declara sus bloques
+`server` y su certificado. `$bemol_env` deriva del host
 el entorno, su upstream (`3000` staging, `3100` producción) y la pantalla temporal.
 
 Revisar los sitios habilitados antes de aplicar cambios: no cargar además el
 `default` de Ubuntu ni otro archivo con los mismos hosts o `default_server`.
-El global no carga `/etc/nginx/conf.d` ni los antiguos directorios de Bemol.
+`conf.d` debe contener sólo `bemol.conf`.
 
 ## Dominios y acceso
 
@@ -45,7 +47,7 @@ interna la realiza Next.js, no Nginx.
 Los institucionales usan HTTPS de Nginx, pero no heredan el WAF ni los límites del
 edge Cloudflare. No añadir registros AAAA sin IPv6 operativo.
 
-`cloudflare.conf` confía en `CF-Connecting-IP` sólo desde los rangos permitidos y
+`bemol-cloudflare.conf` confía en `CF-Connecting-IP` sólo desde los rangos permitidos y
 clasifica el peer original con `$realip_remote_addr`. Actualizar ambos bloques al
 cambiar las listas oficiales [IPv4](https://www.cloudflare.com/ips-v4/) e
 [IPv6](https://www.cloudflare.com/ips-v6/). Un header falsificado no autoriza el acceso.
@@ -82,7 +84,7 @@ Las rutas `/__bemol/maintenance` y `/__bemol/unavailable` son internas de Nginx.
 - Cuerpo máximo: 32 MiB. Respuestas sin buffering para streaming y compresión gzip.
 - Sin caché HTTP compartida: Next.js conserva sus headers `Cache-Control`.
 
-Los headers de seguridad y TLS están en `application.conf`, compartido por el
+Los headers de seguridad y TLS están en `bemol-application.conf`, compartido por el
 dominio general y los subdominios HTTPS. No agregar `add_header` en un `location`
 sin conservar los heredados.
 La caché de sesiones TLS no almacena respuestas HTTP.
@@ -124,15 +126,15 @@ antes de reemplazarlos; no modificar DB ni volúmenes para cambiar el proxy.
      -d staging.bemol.com.ar -d '*.staging.bemol.com.ar'
    ```
 
-3. Copiar primero los archivos compartidos y el sitio a los destinos de la tabla;
-   preparar su enlace en `sites-enabled` y después instalar el archivo global.
+3. Copiar primero `snippets/`, `conf.d/` y los sitios a los destinos de la tabla;
+   preparar el enlace de cada sitio en `sites-enabled` y después instalar `nginx.conf`.
    Para activar la pantalla, publicar la nueva imagen UI y ejecutar `make deploy`
    antes de recargar Nginx: debe existir
    `/opt/bemol-infra/.deploy/maintenance/<entorno>/maintenance.html`, legible por sus workers.
    Comprobar la lectura con `sudo -u www-data test -r /opt/bemol-infra/.deploy/maintenance/staging/maintenance.html`;
    no ampliar permisos de directorios privados para resolver un fallo.
-   Instalar juntos el sitio y `application.conf`, porque comparten los mapas del
-   fallback. No hacen falta cambios en certificados, DNS ni volúmenes.
+   Instalar juntos `conf.d/bemol.conf`, los snippets y los sitios, porque comparten
+   los mapas del fallback. No hacen falta cambios en certificados, DNS ni volúmenes.
 4. Validar antes de recargar un Nginx activo:
 
    ```sh
