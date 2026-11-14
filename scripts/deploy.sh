@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+. ./scripts/lib.sh
+
 environment="${1:-}"
-case "$environment" in
-  staging|production) ;;
-  *) echo "Usage: deploy.sh staging|production" >&2; exit 1 ;;
-esac
+require_env "$environment"
+lock_env "$environment"
 
-repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-cd "$repo_dir"
-
-exec 9>"/tmp/bemol-infra-$environment.lock"
-flock 9
+# One deploy at a time on the shared host: pulls and JVM starts compete for CPU and RAM
+exec 8>/tmp/bemol-infra-deploy.lock
+flock 8
 
 env_file=".env.$environment"
 if [[ ! -f "$env_file" || ! -r "$env_file" ]]; then
@@ -25,18 +24,14 @@ if (( (8#$permissions & 077) != 0 )); then
   exit 1
 fi
 
-project="bemol-$environment"
-compose=(docker compose --project-name "$project" --env-file "$env_file" -f compose.yaml -f "compose.$environment.yaml")
+export BEMOL_ENV="$environment"
+compose=(docker compose --env-file "$env_file" -f compose.yaml -f "compose.$environment.yaml")
 "${compose[@]}" config --quiet
 
 "${compose[@]}" pull ui api
 
-for volume in \
-  "bemol-ui-next-cache-$environment" \
-  "bemol-api-postgres-data-$environment" \
-  "bemol-api-redis-data-$environment" \
-  "bemol-api-logs-$environment"; do
-  docker volume create "$volume" >/dev/null
+for volume in ui-next-cache api-postgres-data api-redis-data api-logs; do
+  docker volume create "bemol-$volume-$environment" >/dev/null
 done
 
 network="bemol-network-$environment"

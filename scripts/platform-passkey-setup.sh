@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
+. ./scripts/lib.sh
+
 environment="${1:-}"
-case "$environment" in
-  staging|production) ;;
-  *) echo 'Usage: make platform-passkey-setup ENV=staging|production ACCOUNT_ID=<platform-account-uuid>' >&2; exit 1 ;;
-esac
+require_env "$environment"
 
 account_id="${2:-}"
 if [[ ! "$account_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
@@ -17,20 +17,10 @@ if [[ ! -t 1 ]]; then
   exit 1
 fi
 account_id="$(printf '%s' "$account_id" | tr 'A-F' 'a-f')"
+lock_env "$environment"
 
-container_for() {
-  local service="$1" volume="$2" containers
-  containers="$(docker ps --filter label=com.docker.compose.project=bemol-$environment \
-    --filter "label=com.docker.compose.service=$service" --filter "volume=$volume" --format '{{.ID}}')"
-  if [[ ! "$containers" =~ ^[a-f0-9]+$ ]]; then
-    echo "Expected exactly one $environment $service container with volume $volume." >&2
-    exit 1
-  fi
-  printf '%s' "$containers"
-}
-
-postgres="$(container_for postgres "bemol-api-postgres-data-$environment")"
-redis="$(container_for redis "bemol-api-redis-data-$environment")"
+postgres="$(env_container "$environment" postgres "bemol-api-postgres-data-$environment")"
+redis="$(env_container "$environment" redis "bemol-api-redis-data-$environment")"
 exists="$(printf "SELECT count(*) FROM platform_accounts WHERE platform_account_id = '%s' AND enabled;\n" "$account_id" \
   | docker exec -i "$postgres" sh -c 'exec psql -X -v ON_ERROR_STOP=1 -At -U "$POSTGRES_USER" -d "$DB_NAME"')"
 if [[ "$exists" != '1' ]]; then

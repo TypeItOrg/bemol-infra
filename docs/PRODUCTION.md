@@ -23,6 +23,7 @@ primero en staging (`make deploy`) y después en producción.
 | Red | `bemol-network-staging` | `bemol-network-production` |
 | Puertos UI / API (`127.0.0.1`) | `3000` / `8080` | `3100` / `8180` |
 | Lock | `/tmp/bemol-infra-staging.lock` | `/tmp/bemol-infra-production.lock` |
+| Lock de deploy del host | `/tmp/bemol-infra-deploy.lock` (compartido) | ídem |
 | Pantalla temporal | `.deploy/maintenance/staging/` | `.deploy/maintenance/production/` |
 | Perfil | `SPRING_PROFILES_ACTIVE=staging` | `SPRING_PROFILES_ACTIVE=prod`, `DEPLOYMENT_ENV=production` |
 | Certificado | `bemol-staging` | `bemol-production` |
@@ -34,11 +35,10 @@ la API no registra su controlador con `prod` y la UI lo deshabilita.
 
 ## Recursos
 
-El VPS tiene 2 vCPU y 3,7 GiB de RAM. Los límites de las plantillas suman unos
-3,6 GiB: producción 2,1 GiB (UI 512m, API 1024m con heap al 60 %, PostgreSQL 512m, Redis 128m) y
-staging 1,4 GiB (UI 384m, API 768m con heap al 50 %, PostgreSQL 256m, Redis 64m).
-Son techos, no reservas, pero sin swap un pico simultáneo puede activar el OOM
-killer del host. Mantener staging por debajo de producción. El VPS tiene 2 GiB de
+El VPS tiene 2 vCPU y 3,7 GiB de RAM. Los límites de las plantillas `.env.<entorno>.example`
+suman unos 3,6 GiB. Son techos, no reservas, pero sin swap un pico simultáneo puede activar el OOM
+killer del host. Mantener staging por debajo de producción. Nunca hay dos deploys
+en paralelo: comparten el lock del host. El VPS tiene 2 GiB de
 swap en `/swapfile` y `vm.swappiness=10` en `/etc/sysctl.d/99-bemol-swappiness.conf`.
 
 ## Comandos
@@ -53,7 +53,7 @@ make platform-passkey-setup ENV=production ACCOUNT_ID=UUID_DE_LA_CUENTA
 ```
 
 Por SSH desde GitHub Actions, la clave de producción debe forzar
-`cd /opt/bemol-infra && exec bash scripts/deploy-production.sh` y ser distinta de
+`cd /opt/bemol-infra && exec bash scripts/deploy.sh production` y ser distinta de
 la de staging; cada una sólo puede desplegar su entorno.
 
 ## Primera instalación

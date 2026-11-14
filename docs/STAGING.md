@@ -53,7 +53,8 @@ make deploy
 
 Es el mismo flujo para un VPS vacío y para actualizaciones. El script:
 
-1. Toma `/tmp/bemol-infra-staging.lock` y valida `.env.staging` y el Compose combinado.
+1. Toma `/tmp/bemol-infra-staging.lock` y el lock general de deploys del host
+   (`/tmp/bemol-infra-deploy.lock`); valida `.env.staging` y el Compose combinado.
 2. Descarga UI y API.
 3. Crea los cuatro volúmenes y la red si faltan; reutiliza los existentes.
 4. Lee `public/maintenance.html` de la imagen UI y actualiza atómicamente
@@ -127,7 +128,7 @@ privados. Un push a este repositorio tampoco aplica Nginx ni despliega por sí s
 | `bemol-api-logs-staging` | `/app/logs` — logs de API |
 | `bemol-ui-next-cache-staging` | `/app/.next/cache` — caché Next.js |
 
-El Compose base declara los volúmenes externos; staging asigna sus nombres reales.
+El Compose base declara los volúmenes externos con el sufijo `BEMOL_ENV`, que exporta el script.
 El script los crea fuera de Compose. La red externa es `bemol-network-staging`.
 
 PostgreSQL crea `DB_NAME` si falta y reutiliza una base existente. Su healthcheck

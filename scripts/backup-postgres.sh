@@ -1,15 +1,12 @@
 #!/bin/sh
 set -eu
 
+cd -- "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+. ./scripts/lib.sh
+
 environment="${1:-}"
-
-case "$environment" in
-  staging|production) ;;
-  *) echo "Environment must be staging or production" >&2; exit 1 ;;
-esac
-
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-cd "$repo_dir"
+require_env "$environment"
+lock_env "$environment"
 
 env_file=".env.$environment"
 
@@ -35,19 +32,8 @@ case "$retention_days" in
   0) echo "BACKUP_RETENTION_DAYS must be greater than zero" >&2; exit 1 ;;
 esac
 
-# Select PostgreSQL by its mounted volume, not its container name.
 postgres_volume="${BACKUP_POSTGRES_VOLUME:-bemol-api-postgres-data-$environment}"
-postgres_containers="$(docker ps \
-  --filter "label=com.docker.compose.project=bemol-$environment" \
-  --filter "volume=$postgres_volume" \
-  --filter label=com.docker.compose.service=postgres \
-  --format '{{.ID}}')"
-set -- $postgres_containers
-if [ "$#" -ne 1 ]; then
-  echo "Expected exactly one running $environment PostgreSQL container; found $#" >&2
-  exit 1
-fi
-postgres_container="$1"
+postgres_container="$(env_container "$environment" postgres "$postgres_volume")"
 
 backup_dir="$backup_root/$environment"
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)

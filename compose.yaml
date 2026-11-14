@@ -1,4 +1,4 @@
-name: bemol
+name: bemol-${BEMOL_ENV:?BEMOL_ENV is required}
 
 services:
   ui:
@@ -6,7 +6,7 @@ services:
     pull_policy: always
     init: true
     ports:
-      - "127.0.0.1:${UI_HOST_PORT:-3000}:3000"
+      - "127.0.0.1:${UI_HOST_PORT:?UI_HOST_PORT is required}:3000"
     environment:
       # =============================================================================
       # Application
@@ -53,7 +53,7 @@ services:
     pull_policy: always
     init: true
     ports:
-      - "127.0.0.1:${API_HOST_PORT:-8080}:8080"
+      - "127.0.0.1:${API_HOST_PORT:?API_HOST_PORT is required}:8080"
     environment:
       # =============================================================================
       # Application
@@ -217,12 +217,21 @@ services:
 volumes:
   ui-next-cache:
     external: true
+    name: bemol-ui-next-cache-${BEMOL_ENV:?BEMOL_ENV is required}
 
   postgres-data:
     external: true
+    name: bemol-api-postgres-data-${BEMOL_ENV:?BEMOL_ENV is required}
 
   redis-data:
     external: true
+    name: bemol-api-redis-data-${BEMOL_ENV:?BEMOL_ENV is required}
 
   api-logs:
     external: true
+    name: bemol-api-logs-${BEMOL_ENV:?BEMOL_ENV is required}
+
+networks:
+  default:
+    external: true
+    name: bemol-network-${BEMOL_ENV:?BEMOL_ENV is required}
