@@ -104,11 +104,23 @@ Una caída de Nginx o del VPS queda fuera de esta pantalla.
 ## Entrega desde GitHub Actions
 
 Los workflows `.github/workflows/deploy-staging.yaml` de API y UI reaccionan a
-pushes a `staging`: primero CI, luego publicación en GHCR y finalmente SSH.
-Ambos ejecutan:
+pushes a `staging`: publican en GHCR y llaman al workflow reutilizable
+[deploy.yaml](../.github/workflows/deploy.yaml) de este repositorio, que entra por
+SSH. Es el mismo para staging y producción; un cambio en `main` afecta a los cuatro
+workflows de API y UI.
 
-```sh
-cd /opt/bemol-infra && exec bash scripts/deploy-staging.sh
+En el VPS, el usuario `bemol-deploy` tiene una clave por entorno; el comando
+forzado en `authorized_keys` decide qué se ejecuta y `/etc/sudoers.d/bemol-deploy`
+lo autoriza. El workflow no envía ningún comando:
+
+| Entorno | Comando forzado y regla de sudo |
+|---|---|
+| staging | `/usr/bin/bash /opt/bemol-infra/scripts/deploy-staging.sh` |
+| production | `/usr/bin/bash /opt/bemol-infra/scripts/deploy.sh production` |
+
+```text
+command="/usr/bin/sudo -n -H -u ubuntu <comando>" ssh-ed25519 ...
+bemol-deploy ALL=(ubuntu) NOPASSWD: <comando>
 ```
 
 El environment `staging` de cada repositorio necesita `DEPLOY_HOST`, `DEPLOY_PORT`,

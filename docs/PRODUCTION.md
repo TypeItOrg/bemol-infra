@@ -52,9 +52,30 @@ make backup-db ENV=production
 make platform-passkey-setup ENV=production ACCOUNT_ID=UUID_DE_LA_CUENTA
 ```
 
-Por SSH desde GitHub Actions, la clave de producción debe forzar
-`cd /opt/bemol-infra && exec bash scripts/deploy.sh production` y ser distinta de
-la de staging; cada una sólo puede desplegar su entorno.
+GitHub Actions entra con una clave de `bemol-deploy` propia de producción; ver
+[Entrega desde GitHub Actions](STAGING.md#entrega-desde-github-actions).
+
+## Releases: promoción de imágenes
+
+Las imágenes se construyen una sola vez, al hacer push a `staging` en API y UI
+(`sha-<commit>` y `:staging`). Producción nunca reconstruye: promueve la misma imagen.
+
+1. Probar el commit en staging.
+2. Crear y publicar un tag `vMAJOR.MINOR.PATCH` sobre ese commit:
+
+   ```sh
+   git tag v1.2.0 <commit> && git push origin v1.2.0
+   ```
+
+3. Aprobar el deploy en el environment `production` del repositorio. El tag sólo
+   se acepta si ese commit ya tiene imagen de staging; ver
+   [deploy.yaml](../.github/workflows/deploy.yaml).
+
+Cada repositorio se libera con su propio tag; si un cambio toca API y UI,
+promover ambos. Rollback: en Actions, ejecutar "Promote production" eligiendo el
+tag de la versión anterior; pasa por la misma aprobación.
+
+Cambiar de imagen no revierte migraciones Flyway.
 
 ## Primera instalación
 
