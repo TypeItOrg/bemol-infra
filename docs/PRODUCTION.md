@@ -85,6 +85,7 @@ Cambiar de imagen no revierte migraciones Flyway.
 2. DNS en Cloudflare: `bemol.com.ar`, `www` y `*.bemol.com.ar` proxied hacia el
    VPS (incluye `admin`); Nginx rechaza el acceso directo. SSL/TLS en Full (strict).
    Sin AAAA mientras no haya IPv6 operativo.
+   Crear la regla de caché de imágenes según [CLOUDFLARE-CACHE.md](CLOUDFLARE-CACHE.md).
 3. Emitir el certificado:
 
    ```sh
